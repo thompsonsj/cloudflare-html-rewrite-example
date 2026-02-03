@@ -17,3 +17,8 @@ DEBUG_LOGS = "1"
 
 # SHOP_URL value should use canonical www/non-www form to avoid redirects
 SHOP_URL = "https://teamtailorcdn.com/"
+
+[observability]
+[observability.logs]
+enabled = true
+invocation_logs = true
