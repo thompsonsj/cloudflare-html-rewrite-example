@@ -1,58 +1,101 @@
-# Rewriting HTML with Cloudflare
+# Cloudflare HTML Rewrite Example
 
-## Motivation
+This repo demonstrates a Cloudflare Worker that proxies HTML and rewrites the `<head>` to inject canonical and hreflang tags based on the requested path. It is a practical starting point for HTML customizations that must happen before the page reaches the browser.
 
-When customizing Shoptet projects with code, one of the limitations is the inability to manipulate the HTML outside of dedicated fields (e.g. global `<head>` code). Using Cloudflare as a proxy opens up this possibility. With [Cloudflare Workers](https://developers.cloudflare.com/workers/) and [Workers Routes](https://developers.cloudflare.com/workers/configuration/routing/routes/), it is possible to programmatically modify the HTML before it reaches the user. The purpose of this package is to provide a starting point for developing customization workers.
+## Why use a Worker
 
-Benefits of using Cloudflare workers for HTML rewriting include
+- Avoid layout shifts caused by client-side DOM changes.
+- Reduce client-side work on slower devices and networks.
+- Centralize HTML modifications at the edge.
 
-- Avoid flashing and moving elements due to client-side JavaScript customizations.
-- Less burden on client devices. This is especially noticeable on older mobile devices or on slow networks, where client-side JavaScript customizations inadvertently increase page load times.
+Tradeoff: the HTML response is slightly delayed while it is parsed and rewritten.
 
-One potential drawback is that the browser must wait a bit longer for the HTML document itself. However, this time can be minimized to tens of milliseconds.
+## What this worker does
 
-## Start with a simple local setup
+In `src/index.ts`, the worker:
 
-This will give you a simple Cloudflare Worker that can be run locally:
+- Proxies the upstream HTML.
+- Removes any existing `canonical` and `alternate` tags from `<head>`.
+- Injects a new canonical and hreflang set based on the request path.
+- Adds a small demo block after `#header` to show the rewrite in action.
 
-- Requirements:
-  - Node.js installed on your system
-- Clone this repo and navigate to its root directory
-- Run `npm i`.
-- ~~Run `npm run dev:local` Due to Cloudflare restrictions, you must use `npm run dev:remote` when developing against the site that is already using Cloudflare as a proxy.~~
-- Currently, the only way to use rewriting is to use `npm run dev:remote` for which you need to be logged in a (free) Cloudflare account. The usage counts towards your Cloudflare plan limits.
-- At <http://localhost:8787/> you should see a modified showcase project <https://classic.shoptet.cz/> The project can be switched by changing `SHOP_URL` env variable in `wrangler.toml`.
-- You can play around with `src/index.ts` and see your changes applied.
+## Local development
+
+Requirements:
+
+- Node.js
+- A Cloudflare account (free is fine) for `npm run dev:remote`
+
+Steps:
+
+1. Install dependencies: `npm i`
+2. Run `npm run dev:remote`
+3. Visit <http://localhost:8787/>
+
+The upstream origin is defined by `SHOP_URL` in `wrangler.toml`.
+
+Note: local development works best in Safari; Chrome DevTools may request a `.well-known/appspecific/...` URL that can interfere with rewrites.
+
+## Configuration
+
+`wrangler.toml` controls the worker environment:
+
+- `ENVIRONMENT`: `production` or `development`
+- `SHOP_URL`: upstream origin for local proxying
+- `DEBUG_LOGS`: set to `1` or `true` to enable verbose logs
 
 ## Production use
 
-- Requirements:
-  - Shoptet project using Cloudflare as proxy (see [Shoptet docs](https://podpora.shoptet.cz/hc/cs/articles/7128655751826-Cloudflare))
-  - Cloudflare account with access to project's Cloudflare dashboard. You will need `All domains` access with `Cloudflare Workers Admin` rights.
-- Run `npm run dev:remote` for local development.
-- Run `npm run deploy:production` to deploy using Wrangler.
-- Once you have deployed the worker, set up Workers Routes in the Cloudflare dashboard of the selected domain. This tells Cloudflare which routes to trigger your worker on. It is important to exclude common system routes, assets, etc. to save resources and prevent unexpected behavior. Recommended disabled routes are listed [here](/src/config/recommended-disabled-routes.json). The list is not exhaustive and should be adjusted to the specific project. Various HTML modals can be affected by the worker, for example, so it is recommended to test the worker in all user scenarios.
+Requirements:
 
-Example of typical settings of Workers Routes (see [docs](https://developers.cloudflare.com/workers/configuration/routing/routes/) for matching rules):
+- A Shoptet project using Cloudflare as a proxy (see [Shoptet docs](https://podpora.shoptet.cz/hc/cs/articles/7128655751826-Cloudflare))
+- Cloudflare access with `Cloudflare Workers Admin` rights
+
+Steps:
+
+1. Run `npm run deploy:production`
+2. Configure Workers Routes in Cloudflare
+
+When setting routes, exclude common system and asset paths. Recommended disabled routes are listed in `src/config/recommended-disabled-routes.json`, and should be adjusted per project.
+
+Example of typical Workers Routes settings (see [docs](https://developers.cloudflare.com/workers/configuration/routing/routes/) for matching rules):
 
 <img src="docs/img/cloudflare-navigation.png" alt="Cloudflare navigation" style="margin: 20px; padding: 10px; border: 1px solid gray" />
 
-<img src="docs/img/routes-setting.png" alt="Wourker Routes settings" style="margin: 20px; padding: 10px; border: 1px solid gray" />
+<img src="docs/img/routes-setting.png" alt="Worker Routes settings" style="margin: 20px; padding: 10px; border: 1px solid gray" />
 
-## Parsing the entire document vs HTMLRewriter
+## HTML parsing strategy
 
-This example uses [node-html-parser](https://www.npmjs.com/package/node-html-parser), which parses the entire HTML document into memory. It offers similar possibilities as DOM manipulation in the browser (`querySelector` etc.). This makes it suitable for large changes in HTML documents. Average slowdown of TTFB with `node-html-parser` is about 50-70ms. We recommend it for most use cases.
+This example uses [node-html-parser](https://www.npmjs.com/package/node-html-parser), which parses the whole document into memory. It is flexible and comparable to browser DOM manipulation (`querySelector`, etc.), and is suitable for more complex HTML changes. Average TTFB increase is around 50-70ms.
 
-Switch to the `with-html-rewriter` branch to use Cloudflare's own [HTMLRewriter](https://developers.cloudflare.com/workers/runtime-apis/html-rewriter/). Its main appeal is that it rewrites HTML while streaming the response, making it faster in comparison to libraries like `node-html-parser` or `cheerio`. On the other hand, its modifying capabilities are limited. For example, by definition, you cannot change an element based on another element further down in the HTML document, because the former is already sent to the user when the latter is processed. The average slowdown of TTFB with HTMLRewriter is about 15ms. We recommend it for cases where only very simple HTML changes are required.
+If you only need simple streaming rewrites, switch to the `with-html-rewriter` branch to use Cloudflare's [HTMLRewriter](https://developers.cloudflare.com/workers/runtime-apis/html-rewriter/). It streams HTML while rewriting, but has more limited capabilities.
 
-## FAQ
+## Staging deployments
 
-### How to deploy worker to staging environment
+To deploy a staging worker, use environment variables. In this repo, `npm run deploy:staging` publishes a `workers.dev` URL that runs in dev mode. See Cloudflare docs for environment variables and staging workflows.
 
-To deploy your worker to a staging environment (where you can show your changes to a client, for example) instead of production, you can use worker environment variables. In the example, this is what `npm run deploy:staging` does. It will publish your worker to a `workers.dev` URL where it will run in dev mode, similar to localhost. See the Cloudflare documentation for more information on deployments and environment variables.
+## Future enhancements
 
-## Possible future enhancements of this starter
+- Live reload for `dev:remote`
+- Unified workflow for HTML, JS, and CSS customization
+- GitHub Actions deployment
 
-- Adding livereload to `dev:remote` (currently not available)
-- Example of developing and deploying worker together with client-side customizations (JavaScript and CSS) in an unified workflow. This is doable since Cloudflare Workers can serve static assets.
-- Deployment with GitHub actions
+## Injected content
+
+The worker removes any existing canonical and hreflang tags and injects the following set based on the requested path. Example for `/en/`:
+
+```html
+<link rel="canonical" href="https://www.teamtailor.com/en/">
+<link rel="alternate" hreflang="en" href="https://www.teamtailor.com/en/">
+<link rel="alternate" hreflang="en-us" href="https://www.teamtailor.com/en-us/">
+<link rel="alternate" hreflang="da" href="https://www.teamtailor.com/da/">
+<link rel="alternate" hreflang="de" href="https://www.teamtailor.com/de/">
+<link rel="alternate" hreflang="es" href="https://www.teamtailor.com/es/">
+<link rel="alternate" hreflang="fi" href="https://www.teamtailor.com/fi/">
+<link rel="alternate" hreflang="fr" href="https://www.teamtailor.com/fr/">
+<link rel="alternate" hreflang="it" href="https://www.teamtailor.com/it/">
+<link rel="alternate" hreflang="nl" href="https://www.teamtailor.com/nl/">
+<link rel="alternate" hreflang="no" href="https://www.teamtailor.com/no/">
+<link rel="alternate" hreflang="sv" href="https://www.teamtailor.com/sv/">
+<link rel="alternate" hreflang="x-default" href="https://www.teamtailor.com/en/">
+```
