@@ -7,6 +7,7 @@ workers_dev = false
 [vars]
 ENVIRONMENT = "production"
 DEBUG_LOGS = "0"
+GTM_CONTAINER_ID = "GTM-593GQ2S"
 
 [env.dev]
 workers_dev = true
@@ -14,6 +15,7 @@ workers_dev = true
 [env.dev.vars]
 ENVIRONMENT = "development"
 DEBUG_LOGS = "1"
+GTM_CONTAINER_ID = "GTM-593GQ2S"
 
 # SHOP_URL value should use canonical www/non-www form to avoid redirects
 SHOP_URL = "https://teamtailorcdn.com/"
