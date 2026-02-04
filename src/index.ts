@@ -93,6 +93,11 @@ export default {
 		debug('injected links for:', enPath);
 		debug('injected link HTML:', headLinks);
 
+		// Inject Google Tag Manager
+		const gtmId = env.GTM_CONTAINER_ID ?? 'GTM-593GQ2S';
+		const gtmScript = `<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','${gtmId}');</script>`;
+		head?.insertAdjacentHTML('beforeend', gtmScript);
+
 		// Add content to header
 		const header = root.querySelector('#header');
 		header?.insertAdjacentHTML('afterend', '<div class="container"><h1>Hello from Cloudflare Workers using node-html-parser</h1></div>');
