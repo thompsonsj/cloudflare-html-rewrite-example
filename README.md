@@ -43,6 +43,18 @@ Note: local development works best in Safari; Chrome DevTools may request a `.we
 - `ENVIRONMENT`: `production` or `development`
 - `SHOP_URL`: upstream origin for local proxying
 - `DEBUG_LOGS`: set to `1` or `true` to enable verbose logs
+- `IMAGE_ORIGIN_URL`: optional base URL for image transformation (e.g. `https://storage.googleapis.com/your-bucket`). When set, requests to `/img/*` are served as resized images.
+
+## Image transformations
+
+When `IMAGE_ORIGIN_URL` is set, the worker also handles **image resizing** at the path prefix `/img/`. It uses [Cloudflare Image Resizing](https://developers.cloudflare.com/images/transform-images/transform-via-workers/) and caches both the origin fetch and the transformed result (see [Hosting and transforming images at scale with Cloudflare](https://medium.com/@nfarina/hosting-and-transforming-images-at-scale-with-cloudflare-1aaeb97651bc)).
+
+- **URL format:** `/img/<path-to-image>?width=800&height=600&fit=cover&quality=85`
+- **Query params:** `width`, `height`, `fit` (scale-down, contain, cover, crop, pad, squeeze), `quality`, `format`, `dpr`, `blur`, `gravity`, `anim`
+- **Content negotiation:** `Accept: image/avif` or `image/webp` is honored when `format` is not in the query.
+- **Origin:** The path after `/img/` is appended to `IMAGE_ORIGIN_URL` (e.g. `/img/uploads/photo.jpg` → `IMAGE_ORIGIN_URL/uploads/photo.jpg`). Only images from that origin host are allowed.
+
+To use a dedicated subdomain (e.g. `images.example.com`), add a Workers Route for that host to this same worker and either use a path like `images.example.com/uploads/photo.jpg` with a small code change to treat the full path as the image path, or keep using `example.com/img/uploads/photo.jpg`.
 
 ## Production use
 

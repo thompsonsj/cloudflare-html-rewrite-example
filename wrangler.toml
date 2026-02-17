@@ -8,6 +8,9 @@ workers_dev = false
 ENVIRONMENT = "production"
 DEBUG_LOGS = "0"
 GTM_CONTAINER_ID = "GTM-593GQ2S"
+# Optional: base URL for image transformation origin (e.g. https://storage.googleapis.com/your-bucket).
+# When set, requests to /img/* are served as resized images; see src/images.ts
+IMAGE_ORIGIN_URL = "https://cdn.prod.website-files.com"
 
 [env.dev]
 workers_dev = true
@@ -19,6 +22,8 @@ GTM_CONTAINER_ID = "GTM-593GQ2S"
 
 # SHOP_URL value should use canonical www/non-www form to avoid redirects
 SHOP_URL = "https://teamtailorcdn.com/"
+# Optional: set to a base URL (e.g. Firebase Storage) to enable /img/* transformations
+IMAGE_ORIGIN_URL = "https://cdn.prod.website-files.com"
 
 [observability]
 enabled = false
