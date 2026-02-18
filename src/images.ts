@@ -12,8 +12,10 @@
 
 import type { Env } from './types/env';
 
-/** Supported image file extensions for transformation */
-const IMAGE_EXT_RE = /\.(jpe?g|png|gif|webp|avif)$/i;
+/** Raster image extensions: apply Cloudflare Image Resizing. */
+const RASTER_EXT_RE = /\.(jpe?g|png|gif|webp|avif)$/i;
+/** SVG: serve as-is from origin (no transformation or quality). */
+const SVG_EXT_RE = /\.svg$/i;
 
 /** One year TTL for successful image responses */
 const CACHE_TTL_OK = 31_536_000;
@@ -99,7 +101,7 @@ export async function handleImageRequest(
 		return new Response('Missing image path', { status: 400 });
 	}
 
-	if (!IMAGE_EXT_RE.test(path)) {
+	if (!RASTER_EXT_RE.test(path) && !SVG_EXT_RE.test(path)) {
 		return new Response('Unsupported image type', { status: 400 });
 	}
 
@@ -113,20 +115,40 @@ export async function handleImageRequest(
 		return new Response('Invalid image origin URL', { status: 500 });
 	}
 
-	// Optional: restrict to same host or allow list (article used example.com only)
+	// Restrict to same host or allow list (article used example.com only)
 	const allowedHost = new URL(originBase).hostname;
 	if (parsed.hostname !== allowedHost) {
 		return new Response('Disallowed image source', { status: 403 });
 	}
 
-	const url = new URL(request.url);
-	const imageOptions = getImageOptions(request, url);
-
 	const imageRequest = new Request(originUrl, {
 		headers: request.headers,
 	});
 
-	// Fetch with Cloudflare Image Resizing + cache so both origin fetch and transformed result are cached
+	// SVG: no transformation or quality — fetch from origin and serve as-is (fixes empty SVG in production)
+	if (SVG_EXT_RE.test(path)) {
+		const response = await fetch(imageRequest, {
+			cf: {
+				cacheEverything: true,
+				cacheTtlByStatus: {
+					'200-299': CACHE_TTL_OK,
+					'300-399': 300,
+					'400-499': CACHE_TTL_CLIENT_ERROR,
+					'500-599': CACHE_TTL_SERVER_ERROR,
+				},
+			},
+		});
+		if (!response.ok && !response.redirected) return response;
+		const out = new Response(response.body, response);
+		out.headers.set('Content-Type', response.headers.get('Content-Type') ?? 'image/svg+xml');
+		out.headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+		return out;
+	}
+
+	const url = new URL(request.url);
+	const imageOptions = getImageOptions(request, url);
+
+	// Raster: fetch with Cloudflare Image Resizing + cache
 	const response = await fetch(imageRequest, {
 		cf: {
 			image: imageOptions as Record<string, string | number | boolean>,

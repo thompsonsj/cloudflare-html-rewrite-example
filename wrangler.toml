@@ -19,6 +19,8 @@ IMAGE_REWRITE_BACKEND = "cloudflare"
 # IMAGE_REWRITE_QUALITY = "85"
 # Optional: "auto" = content negotiation (AVIF/WebP); "preserve" = keep original format from file extension
 # IMAGE_REWRITE_FORMAT = "auto"
+# Ignore SVG in HTML rewrite (default: true). "1"/"true" = leave SVG URLs as-is; "0"/"false" = rewrite to /img/... (served as-is by worker)
+IMAGE_REWRITE_IGNORE_SVG = "1"
 
 [env.dev]
 workers_dev = true
@@ -36,6 +38,7 @@ IMAGE_REWRITE_BACKEND = "cloudflare"
 # NETLIFY_IMAGE_CDN_BASE = "https://www.teamtailor.com"
 # IMAGE_REWRITE_QUALITY = "85"
 # IMAGE_REWRITE_FORMAT = "auto"
+IMAGE_REWRITE_IGNORE_SVG = "1"
 
 [observability]
 enabled = false
