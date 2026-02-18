@@ -49,13 +49,14 @@ Note: local development works best in Safari; Chrome DevTools may request a `.we
 - `IMAGE_REWRITE_QUALITY`: optional quality for rewritten images, 1–100 (default 85). Applies to lossy formats where the backend supports it.
 - `IMAGE_REWRITE_FORMAT`: optional `"auto"` or `"preserve"`. `auto` (default): no format is set in the URL so the transformation service uses content negotiation (AVIF/WebP when the browser supports it). `preserve`: output format is derived from the source file extension (png, jpeg, webp, gif) so the original format is kept.
 - `IMAGE_REWRITE_IGNORE_SVG`: optional, default `"1"`/`"true"`. When on, SVG URLs are **not** rewritten in HTML (they stay pointing at the origin CDN). SVGs have no transform or quality settings; turning this off (`"0"`/`"false"`) rewrites SVG URLs to `/img/...` so the worker serves them as-is (no transformation).
+- `IMAGE_REWRITE_FULL_WIDTH_CLASSES`: optional, comma-separated list of CSS class names. If an `<img>` has any of these classes, its `sizes` attribute is **overridden** to a full-width value (`(max-width: 2400px) 100vw, 2400px`) so the browser selects a larger image from `srcset` (e.g. fixes Webflow hero images that ship with a small `sizes` like `240px`).
 
 ## Responsive image rewrite
 
 When `IMAGE_REWRITE_BACKEND` is set, the worker rewrites every `<img>` that references `https://cdn.prod.website-files.com/` (in `src` or in `srcset`) so the browser never loads from that CDN — **except SVG URLs when `IMAGE_REWRITE_IGNORE_SVG` is on (default)**. SVGs are not transformed or quality-adjusted; with ignore on, they are left pointing at the origin CDN.
 
 - **Plain `<img src="...">`** (no srcset): the `src` is replaced and a `srcset` is added with widths 400, 800, 1200 and a default `sizes` attribute.
-- **Existing responsive `<img src="..." srcset="... 500w, ... 800w, ..." sizes="...">`**: each CDN URL in `src` and `srcset` is replaced with a transformation URL at the **same width** (or density); the existing `sizes` is kept. So you keep the same resolution choices and layout hints, but all assets are served from Cloudflare or Netlify.
+- **Existing responsive `<img src="..." srcset="... 500w, ... 800w, ..." sizes="...">`**: each CDN URL in `src` and `srcset` is replaced with a transformation URL at the **same width** (or density). The existing `sizes` is kept unless the img has a class listed in `IMAGE_REWRITE_FULL_WIDTH_CLASSES`, in which case `sizes` is set to a full-width value so the browser picks a larger image (fixes e.g. Webflow full-width heroes that use a small `sizes`).
 
 Quality and format are controlled by `IMAGE_REWRITE_QUALITY` and `IMAGE_REWRITE_FORMAT` (see Configuration above). With `format=auto`, the service can return AVIF or WebP when the browser supports it without changing your HTML.
 

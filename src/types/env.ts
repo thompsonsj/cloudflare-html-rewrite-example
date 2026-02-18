@@ -15,4 +15,6 @@ export interface Env {
 	IMAGE_REWRITE_FORMAT?: 'auto' | 'preserve';
 	/** When "1" or "true" (default), do not rewrite SVG URLs in HTML — leave them pointing at the origin CDN. SVGs have no transform/quality; set to "0"/"false" to rewrite SVGs to /img/... so they are served by the worker as-is. */
 	IMAGE_REWRITE_IGNORE_SVG?: string;
+	/** Comma-separated list of CSS class names. If an img has any of these classes, its sizes attribute is set to a full-width value so the browser picks a larger srcset candidate (fixes e.g. Webflow hero images that use small sizes). */
+	IMAGE_REWRITE_FULL_WIDTH_CLASSES?: string;
 }
