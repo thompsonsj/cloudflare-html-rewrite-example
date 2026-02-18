@@ -5,4 +5,12 @@ export interface Env {
 	GTM_CONTAINER_ID?: string;
 	/** Base URL for image transformation origin (e.g. https://storage.example.com/bucket). When set, /img/* is handled by the image worker. */
 	IMAGE_ORIGIN_URL?: string;
+	/** If set, HTML is rewritten to replace cdn.prod.website-files.com img src with responsive img (srcset/sizes) using this backend. */
+	IMAGE_REWRITE_BACKEND?: 'cloudflare' | 'netlify';
+	/** For IMAGE_REWRITE_BACKEND=netlify: base URL of the site (e.g. https://www.teamtailor.com). Transform URLs are {base}/.netlify/images?url=... */
+	NETLIFY_IMAGE_CDN_BASE?: string;
+	/** Quality for rewritten images (1–100). Default 85. */
+	IMAGE_REWRITE_QUALITY?: string;
+	/** "auto" = content negotiation (AVIF/WebP when supported). "preserve" = keep original format from file extension. */
+	IMAGE_REWRITE_FORMAT?: 'auto' | 'preserve';
 }
