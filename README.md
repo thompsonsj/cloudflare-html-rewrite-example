@@ -48,10 +48,11 @@ Note: local development works best in Safari; Chrome DevTools may request a `.we
 - `NETLIFY_IMAGE_CDN_BASE`: for `IMAGE_REWRITE_BACKEND=netlify` only; base URL of the site (e.g. `https://www.teamtailor.com`). Transform URLs are `{base}/.netlify/images?url=...`.
 - `IMAGE_REWRITE_QUALITY`: optional quality for rewritten images, 1–100 (default 85). Applies to lossy formats where the backend supports it.
 - `IMAGE_REWRITE_FORMAT`: optional `"auto"` or `"preserve"`. `auto` (default): no format is set in the URL so the transformation service uses content negotiation (AVIF/WebP when the browser supports it). `preserve`: output format is derived from the source file extension (png, jpeg, webp, gif) so the original format is kept.
+- `IMAGE_REWRITE_IGNORE_SVG`: optional, default `"1"`/`"true"`. When on, SVG URLs are **not** rewritten in HTML (they stay pointing at the origin CDN). SVGs have no transform or quality settings; turning this off (`"0"`/`"false"`) rewrites SVG URLs to `/img/...` so the worker serves them as-is (no transformation).
 
 ## Responsive image rewrite
 
-When `IMAGE_REWRITE_BACKEND` is set, the worker rewrites every `<img>` that references `https://cdn.prod.website-files.com/` (in `src` or in `srcset`) so the browser never loads from that CDN. Goal: serve all such images via your chosen transformation service (Cloudflare or Netlify) with consistent quality and optional format control.
+When `IMAGE_REWRITE_BACKEND` is set, the worker rewrites every `<img>` that references `https://cdn.prod.website-files.com/` (in `src` or in `srcset`) so the browser never loads from that CDN — **except SVG URLs when `IMAGE_REWRITE_IGNORE_SVG` is on (default)**. SVGs are not transformed or quality-adjusted; with ignore on, they are left pointing at the origin CDN.
 
 - **Plain `<img src="...">`** (no srcset): the `src` is replaced and a `srcset` is added with widths 400, 800, 1200 and a default `sizes` attribute.
 - **Existing responsive `<img src="..." srcset="... 500w, ... 800w, ..." sizes="...">`**: each CDN URL in `src` and `srcset` is replaced with a transformation URL at the **same width** (or density); the existing `sizes` is kept. So you keep the same resolution choices and layout hints, but all assets are served from Cloudflare or Netlify.
@@ -65,8 +66,9 @@ Quality and format are controlled by `IMAGE_REWRITE_QUALITY` and `IMAGE_REWRITE_
 
 When `IMAGE_ORIGIN_URL` is set, the worker also handles **image resizing** at the path prefix `/img/`. It uses [Cloudflare Image Resizing](https://developers.cloudflare.com/images/transform-images/transform-via-workers/) and caches both the origin fetch and the transformed result (see [Hosting and transforming images at scale with Cloudflare](https://medium.com/@nfarina/hosting-and-transforming-images-at-scale-with-cloudflare-1aaeb97651bc)).
 
-- **URL format:** `/img/<path-to-image>?width=800&height=600&fit=cover&quality=85`
-- **Query params:** `width`, `height`, `fit` (scale-down, contain, cover, crop, pad, squeeze), `quality`, `format`, `dpr`, `blur`, `gravity`, `anim`
+- **URL format:** `/img/<path-to-image>?width=800&height=600&fit=cover&quality=85` (raster only; SVG has no query params).
+- **Query params (raster):** `width`, `height`, `fit` (scale-down, contain, cover, crop, pad, squeeze), `quality`, `format`, `dpr`, `blur`, `gravity`, `anim`.
+- **SVG:** Requests for `.svg` are served **as-is** from the origin (no transformation or quality). This fixes SVGs showing as empty when sent through the image pipeline.
 - **Content negotiation:** `Accept: image/avif` or `image/webp` is honored when `format` is not in the query.
 - **Origin:** The path after `/img/` is appended to `IMAGE_ORIGIN_URL` (e.g. `/img/uploads/photo.jpg` → `IMAGE_ORIGIN_URL/uploads/photo.jpg`). Only images from that origin host are allowed.
 

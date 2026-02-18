@@ -57,6 +57,27 @@ function getFormatFromUrl(url: string): string | undefined {
 	}
 }
 
+function isSvgUrl(url: string): boolean {
+	try {
+		return /\.svg$/i.test(new URL(url).pathname);
+	} catch {
+		return false;
+	}
+}
+
+/** When true, SVG URLs are left as-is (not rewritten). Default true. */
+function ignoreSvg(env: Env): boolean {
+	const v = env.IMAGE_REWRITE_IGNORE_SVG;
+	return v === undefined || v === '' || v === '1' || v.toLowerCase() === 'true';
+}
+
+/** True if this CDN URL should be rewritten (not skipped as SVG when ignore SVG is on). */
+function shouldRewriteUrl(url: string, env: Env): boolean {
+	if (!url.startsWith(CDN_SOURCE_PREFIX)) return false;
+	if (isSvgUrl(url) && ignoreSvg(env)) return false;
+	return true;
+}
+
 /**
  * Build a single transformation URL for the given original image URL and width.
  * Quality and format come from env (IMAGE_REWRITE_QUALITY, IMAGE_REWRITE_FORMAT).
@@ -139,15 +160,16 @@ function parseSrcSet(srcset: string): SrcSetEntry[] {
 }
 
 /**
- * Returns true if this img should be rewritten: src or any srcset URL is from our CDN.
+ * Returns true if this img should be rewritten: src or any srcset URL is from our CDN
+ * and should be rewritten (SVG URLs are skipped when IMAGE_REWRITE_IGNORE_SVG is true).
  */
-function imgUsesCdn(img: HTMLElement): boolean {
+function imgUsesCdn(img: HTMLElement, env: Env): boolean {
 	const src = img.getAttribute('src');
-	if (src?.startsWith(CDN_SOURCE_PREFIX)) return true;
+	if (src && shouldRewriteUrl(src, env)) return true;
 	const srcset = img.getAttribute('srcset');
 	if (!srcset) return false;
 	const entries = parseSrcSet(srcset);
-	return entries.some((e) => e.url.startsWith(CDN_SOURCE_PREFIX));
+	return entries.some((e) => shouldRewriteUrl(e.url, env));
 }
 
 /**
@@ -164,12 +186,12 @@ function rewriteImgElement(
 	const src = img.getAttribute('src');
 	const srcsetAttr = img.getAttribute('srcset');
 
-	// Case 1: img has srcset with CDN URLs — rewrite each entry, keep widths and order
+	// Case 1: img has srcset with CDN URLs — rewrite each entry that should be rewritten, keep SVG/origin when ignore SVG
 	if (srcsetAttr && srcsetAttr.includes(CDN_SOURCE_PREFIX)) {
 		const entries = parseSrcSet(srcsetAttr);
 		const newEntries: string[] = [];
 		for (const { url, width, descriptor } of entries) {
-			if (url.startsWith(CDN_SOURCE_PREFIX)) {
+			if (shouldRewriteUrl(url, env)) {
 				newEntries.push(
 					`${buildTransformUrl(url, width, backend, workerOrigin, env)} ${descriptor}`
 				);
@@ -179,17 +201,17 @@ function rewriteImgElement(
 		}
 		const newSrcset = newEntries.join(', ');
 		img.setAttribute('srcset', newSrcset);
-		// Fallback src: use first CDN URL rewritten at its width, or first entry
-		const firstCdn = entries.find((e) => e.url.startsWith(CDN_SOURCE_PREFIX));
-		const fallbackSrc = firstCdn
+		// Fallback src: first URL we rewrote, or first CDN we would rewrite, or existing src
+		const firstToRewrite = entries.find((e) => shouldRewriteUrl(e.url, env));
+		const fallbackSrc = firstToRewrite
 			? buildTransformUrl(
-					firstCdn.url,
-					firstCdn.width,
+					firstToRewrite.url,
+					firstToRewrite.width,
 					backend,
 					workerOrigin,
 					env
 				)
-			: (src && src.startsWith(CDN_SOURCE_PREFIX)
+			: (src && shouldRewriteUrl(src, env)
 					? buildTransformUrl(
 							src,
 							DEFAULT_WIDTH,
@@ -204,7 +226,7 @@ function rewriteImgElement(
 	}
 
 	// Case 2: plain img (no srcset or srcset without CDN) — only src is CDN
-	if (!src || !src.startsWith(CDN_SOURCE_PREFIX)) return;
+	if (!src || !shouldRewriteUrl(src, env)) return;
 
 	const defaultUrl = buildTransformUrl(
 		src,
@@ -247,7 +269,7 @@ export function rewriteResponsiveImages(
 	const imgs = root.querySelectorAll('img');
 	let count = 0;
 	for (const img of imgs) {
-		if (imgUsesCdn(img)) {
+		if (imgUsesCdn(img, env)) {
 			rewriteImgElement(img, backend, workerOrigin, env);
 			count++;
 		}
