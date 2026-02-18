@@ -1,6 +1,7 @@
 import { parse } from 'node-html-parser';
 import { Env } from './types/env';
 import { handleImageRequest } from './images';
+import { rewriteResponsiveImages } from './responsive-images';
 import { matchesDisabledRoute } from './utils/routes';
 
 const IMAGE_PATH_PREFIX = '/img/';
@@ -107,6 +108,12 @@ export default {
 		const gtmId = env.GTM_CONTAINER_ID ?? 'GTM-593GQ2S';
 		const gtmScript = `<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','${gtmId}');</script>`;
 		head?.insertAdjacentHTML('beforeend', gtmScript);
+
+		// Rewrite cdn.prod.website-files.com images to responsive img (srcset/sizes) via Cloudflare or Netlify Image CDN
+		if (env.IMAGE_REWRITE_BACKEND) {
+			const rewritten = rewriteResponsiveImages(root, request.url, env);
+			debug('responsive images rewritten:', rewritten);
+		}
 
 		// Add content to header
 		const header = root.querySelector('#header');

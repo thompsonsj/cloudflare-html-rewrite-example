@@ -44,6 +44,22 @@ Note: local development works best in Safari; Chrome DevTools may request a `.we
 - `SHOP_URL`: upstream origin for local proxying
 - `DEBUG_LOGS`: set to `1` or `true` to enable verbose logs
 - `IMAGE_ORIGIN_URL`: optional base URL for image transformation (e.g. `https://storage.googleapis.com/your-bucket`). When set, requests to `/img/*` are served as resized images.
+- `IMAGE_REWRITE_BACKEND`: optional `"cloudflare"` or `"netlify"`. When set, HTML is rewritten so that all `cdn.prod.website-files.com` image URLs (in `src` and/or `srcset`) are replaced with transformation URLs (see below).
+- `NETLIFY_IMAGE_CDN_BASE`: for `IMAGE_REWRITE_BACKEND=netlify` only; base URL of the site (e.g. `https://www.teamtailor.com`). Transform URLs are `{base}/.netlify/images?url=...`.
+- `IMAGE_REWRITE_QUALITY`: optional quality for rewritten images, 1–100 (default 85). Applies to lossy formats where the backend supports it.
+- `IMAGE_REWRITE_FORMAT`: optional `"auto"` or `"preserve"`. `auto` (default): no format is set in the URL so the transformation service uses content negotiation (AVIF/WebP when the browser supports it). `preserve`: output format is derived from the source file extension (png, jpeg, webp, gif) so the original format is kept.
+
+## Responsive image rewrite
+
+When `IMAGE_REWRITE_BACKEND` is set, the worker rewrites every `<img>` that references `https://cdn.prod.website-files.com/` (in `src` or in `srcset`) so the browser never loads from that CDN. Goal: serve all such images via your chosen transformation service (Cloudflare or Netlify) with consistent quality and optional format control.
+
+- **Plain `<img src="...">`** (no srcset): the `src` is replaced and a `srcset` is added with widths 400, 800, 1200 and a default `sizes` attribute.
+- **Existing responsive `<img src="..." srcset="... 500w, ... 800w, ..." sizes="...">`**: each CDN URL in `src` and `srcset` is replaced with a transformation URL at the **same width** (or density); the existing `sizes` is kept. So you keep the same resolution choices and layout hints, but all assets are served from Cloudflare or Netlify.
+
+Quality and format are controlled by `IMAGE_REWRITE_QUALITY` and `IMAGE_REWRITE_FORMAT` (see Configuration above). With `format=auto`, the service can return AVIF or WebP when the browser supports it without changing your HTML.
+
+- **Cloudflare** (`IMAGE_REWRITE_BACKEND=cloudflare`): Transform URLs are `{request-origin}/img/{pathname-of-cdn-url}?width=...&quality=...&fit=contain` (and optional `format=` when using preserve). Requires `IMAGE_ORIGIN_URL` set to `https://cdn.prod.website-files.com` so `/img/*` can fetch from that origin.
+- **Netlify** (`IMAGE_REWRITE_BACKEND=netlify`): Transform URLs are `{NETLIFY_IMAGE_CDN_BASE}/.netlify/images?url={encoded-src}&w=...&q=...&fit=contain` (and optional `fm=` when using preserve). Use when the same site is proxied on Netlify and you want [Netlify Image CDN](https://docs.netlify.com/build/image-cdn/overview/).
 
 ## Image transformations
 

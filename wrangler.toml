@@ -11,6 +11,14 @@ GTM_CONTAINER_ID = "GTM-593GQ2S"
 # Optional: base URL for image transformation origin (e.g. https://storage.googleapis.com/your-bucket).
 # When set, requests to /img/* are served as resized images; see src/images.ts
 IMAGE_ORIGIN_URL = "https://cdn.prod.website-files.com"
+# Optional: rewrite HTML img src (cdn.prod.website-files.com) to responsive images. Set to "cloudflare" or "netlify"
+IMAGE_REWRITE_BACKEND = "cloudflare"
+# For netlify backend only: base URL of the site (e.g. https://www.teamtailor.com)
+# NETLIFY_IMAGE_CDN_BASE = "https://www.teamtailor.com"
+# Optional: quality for rewritten images (1-100, default 85)
+# IMAGE_REWRITE_QUALITY = "85"
+# Optional: "auto" = content negotiation (AVIF/WebP); "preserve" = keep original format from file extension
+# IMAGE_REWRITE_FORMAT = "auto"
 
 [env.dev]
 workers_dev = true
@@ -24,6 +32,10 @@ GTM_CONTAINER_ID = "GTM-593GQ2S"
 SHOP_URL = "https://teamtailorcdn.com/"
 # Optional: set to a base URL (e.g. Firebase Storage) to enable /img/* transformations
 IMAGE_ORIGIN_URL = "https://cdn.prod.website-files.com"
+IMAGE_REWRITE_BACKEND = "cloudflare"
+# NETLIFY_IMAGE_CDN_BASE = "https://www.teamtailor.com"
+# IMAGE_REWRITE_QUALITY = "85"
+# IMAGE_REWRITE_FORMAT = "auto"
 
 [observability]
 enabled = false
