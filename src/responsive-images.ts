@@ -30,6 +30,9 @@ const FIT = 'contain';
 const DEFAULT_SIZES =
 	'(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 800px';
 
+/** Sizes for full-width images (e.g. hero); cap at 2400px so the browser doesn't over-fetch on very wide screens. */
+const FULL_WIDTH_SIZES = '(max-width: 2400px) 100vw, 2400px';
+
 /** Extension → format for "preserve" mode. Netlify/Cloudflare use jpeg not jpg. */
 const EXT_TO_FORMAT: Record<string, string> = {
 	jpg: 'jpeg',
@@ -76,6 +79,32 @@ function shouldRewriteUrl(url: string, env: Env): boolean {
 	if (!url.startsWith(CDN_SOURCE_PREFIX)) return false;
 	if (isSvgUrl(url) && ignoreSvg(env)) return false;
 	return true;
+}
+
+/** Parse comma-separated full-width class names from env; returns trimmed non-empty list. */
+function getFullWidthClasses(env: Env): string[] {
+	const raw = env.IMAGE_REWRITE_FULL_WIDTH_CLASSES;
+	if (raw == null || raw === '') return [];
+	return raw
+		.split(',')
+		.map((s) => s.trim())
+		.filter(Boolean);
+}
+
+/** True if the img has any class that is in the full-width list. */
+function imgHasFullWidthClass(img: HTMLElement, env: Env): boolean {
+	const classes = getFullWidthClasses(env);
+	if (classes.length === 0) return false;
+	const classAttr = img.getAttribute('class');
+	if (!classAttr) return false;
+	const imgClasses = classAttr.split(/\s+/).filter(Boolean);
+	return imgClasses.some((c) => classes.includes(c));
+}
+
+/** Choose sizes for this img: full-width sizes if class matches, else existing or default. */
+function getSizesForImg(img: HTMLElement, env: Env): string {
+	if (imgHasFullWidthClass(img, env)) return FULL_WIDTH_SIZES;
+	return img.getAttribute('sizes') ?? DEFAULT_SIZES;
 }
 
 /**
@@ -221,7 +250,7 @@ function rewriteImgElement(
 						)
 					: src);
 		if (fallbackSrc) img.setAttribute('src', fallbackSrc);
-		if (!img.getAttribute('sizes')) img.setAttribute('sizes', DEFAULT_SIZES);
+		img.setAttribute('sizes', getSizesForImg(img, env));
 		return;
 	}
 
@@ -241,7 +270,7 @@ function rewriteImgElement(
 	);
 	img.setAttribute('src', defaultUrl);
 	img.setAttribute('srcset', srcsetEntries.join(', '));
-	img.setAttribute('sizes', img.getAttribute('sizes') ?? DEFAULT_SIZES);
+	img.setAttribute('sizes', getSizesForImg(img, env));
 }
 
 /**
