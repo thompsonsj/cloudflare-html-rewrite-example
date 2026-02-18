@@ -22,7 +22,7 @@ IMAGE_REWRITE_BACKEND = "cloudflare"
 # Ignore SVG in HTML rewrite (default: true). "1"/"true" = leave SVG URLs as-is; "0"/"false" = rewrite to /img/... (served as-is by worker)
 IMAGE_REWRITE_IGNORE_SVG = "1"
 # Optional: comma-separated CSS classes for full-width images. If an img has one of these, sizes is set to 100vw (fixes e.g. Webflow hero)
-IMAGE_REWRITE_FULL_WIDTH_CLASSES = "c-hero-intro_media, hero-image"
+IMAGE_REWRITE_FULL_WIDTH_CLASSES = "c-hero-intro_media, c-hero-dash_figure"
 
 [env.dev]
 workers_dev = true
@@ -41,7 +41,7 @@ IMAGE_REWRITE_BACKEND = "cloudflare"
 # IMAGE_REWRITE_QUALITY = "85"
 # IMAGE_REWRITE_FORMAT = "auto"
 IMAGE_REWRITE_IGNORE_SVG = "1"
-IMAGE_REWRITE_FULL_WIDTH_CLASSES = "c-hero-intro_media, hero-image"
+IMAGE_REWRITE_FULL_WIDTH_CLASSES = "c-hero-intro_media, c-hero-dash_figure"
 
 [observability]
 enabled = false
