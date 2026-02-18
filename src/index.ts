@@ -1,11 +1,21 @@
 import { parse } from 'node-html-parser';
 import { Env } from './types/env';
+import { handleImageRequest } from './images';
 import { matchesDisabledRoute } from './utils/routes';
+
+const IMAGE_PATH_PREFIX = '/img/';
 
 export default {
 	async fetch(request: Request, env: Env) {
-		let response: Response;
 		const url = new URL(request.url);
+
+		// Image transformations: when IMAGE_ORIGIN_URL is set and path is /img/*, serve resized images
+		if (env.IMAGE_ORIGIN_URL && url.pathname.startsWith(IMAGE_PATH_PREFIX)) {
+			const imagePath = url.pathname.slice(IMAGE_PATH_PREFIX.length);
+			return handleImageRequest(request, env as Env & { IMAGE_ORIGIN_URL: string }, imagePath);
+		}
+
+		let response: Response;
 		const debugLogs = env.DEBUG_LOGS === '1' || env.DEBUG_LOGS === 'true';
 		const debug = (message: string, ...args: unknown[]) => {
 			if (debugLogs) {
