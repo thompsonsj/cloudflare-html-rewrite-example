@@ -135,6 +135,31 @@ function getSizesForImg(img: HTMLElement, env: Env): string {
 }
 
 /**
+ * Build the proxy URL with no query parameters. Used for AVIF passthrough on Cloudflare
+ * so the worker fetches and caches the original file without triggering resize (avoids ERROR 9520).
+ * For Netlify we still return a URL with params (their CDN expects them).
+ */
+function buildPassthroughUrl(
+	originalSrc: string,
+	backend: 'cloudflare' | 'netlify',
+	workerOrigin: string
+): string {
+	if (backend === 'netlify') {
+		// Netlify image CDN requires params; no true passthrough. Caller should use buildTransformUrl.
+		return originalSrc;
+	}
+	let pathname: string;
+	try {
+		pathname = new URL(originalSrc).pathname;
+	} catch {
+		return originalSrc;
+	}
+	pathname = pathname.startsWith('/') ? pathname.slice(1) : pathname;
+	const origin = workerOrigin.replace(/\/$/, '');
+	return `${origin}/img/${pathname}`;
+}
+
+/**
  * Build a single transformation URL for the given original image URL and width.
  * Quality and format come from env (IMAGE_REWRITE_QUALITY, IMAGE_REWRITE_FORMAT).
  * formatOverride: when building <picture> fallbacks, pass 'avif' or 'webp'. For Cloudflare avif, caller should only use widths ≤ AVIF_MAX_WIDTH.
@@ -258,13 +283,24 @@ function replaceImgWithPicture(
 				`${buildTransformUrl(e.url, e.width, backend, workerOrigin, env, 'webp')} ${e.descriptor}`
 		)
 		.join(', ');
+	// For AVIF sources on Cloudflare, use passthrough URLs (no query params) so the worker just caches the file and avoids ERROR 9520.
 	const avifSrcset =
 		avifEntries.length > 0
 			? avifEntries
-					.map(
-						(e) =>
-							`${buildTransformUrl(e.url, e.width, backend, workerOrigin, env, 'avif')} ${e.descriptor}`
-					)
+					.map((e) => {
+						const url =
+							backend === 'cloudflare' && isAvifUrl(e.url)
+								? buildPassthroughUrl(e.url, backend, workerOrigin)
+								: buildTransformUrl(
+										e.url,
+										e.width,
+										backend,
+										workerOrigin,
+										env,
+										'avif'
+									);
+						return `${url} ${e.descriptor}`;
+					})
 					.join(', ')
 			: '';
 	const fallbackSrc = buildTransformUrl(
