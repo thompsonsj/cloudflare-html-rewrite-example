@@ -42,14 +42,16 @@ The origin sends an `<img>` with a full `srcset` of AVIF URLs and a single `size
 | **No SVG** | None of the URLs are `.svg`, and AVIF is not ignored → all 7 entries are included in `toRewrite`. |
 | **Picture fallbacks** | `IMAGE_REWRITE_PICTURE_FALLBACKS` is on (default) → the worker uses `replaceImgWithPicture` instead of a single `<img>`. |
 | **Entries** | Parsed `srcset` yields 7 entries: 500w, 800w, 1080w, 1600w, 2000w, 2600w, 3840w. |
-| **AVIF width cap** | For Cloudflare, `avifEntries = entries.filter(e => e.width <= 1200)` → **500, 800, 1080** only. Widths 1600, 2000, 2600, 3840 are not used in the AVIF source (see [Cloudflare format limits](https://developers.cloudflare.com/images/transform-images/#format-limitations)). |
+| **Origin-width and passthrough** | Entries whose URL encodes the width (e.g. `-p-2600.avif` for 2600w) get transform URLs. The 3840w entry points at `...-min.avif` (no `-p-3840`), so it gets a **passthrough** URL (no query params): the worker caches the origin file without transform, avoiding scale-up while still caching on Cloudflare. |
+| **AVIF source** | All 7 entries use passthrough URLs (no params) on Cloudflare, so every width is available in AVIF and cached. |
+| **WebP source** | Only the 6 entries with matching `-p-WIDTH` get transform URLs (500–2600); 3840 is not converted to WebP (would require transform). |
 | **Sizes** | The image has no class in `IMAGE_REWRITE_FULL_WIDTH_CLASSES` → the existing `sizes="100vw"` is kept. |
 
 ---
 
 ## 3. Output (after rewrite)
 
-The `<img>` is replaced by a `<picture>` with one AVIF source (widths ≤ 1200), one WebP source (all widths), and an `<img>` fallback so browsers without AVIF support still get an image. Worker origin is assumed to be `https://teamtailorcdn.com`.
+The `<img>` is replaced by a `<picture>` with one AVIF source (all widths, passthrough URLs), one WebP source (transformable widths only), and an `<img>` fallback. Worker origin is assumed to be `https://teamtailorcdn.com`.
 
 ```html
 <figure class="c-case-grid" style="...">
@@ -57,26 +59,23 @@ The `<img>` is replaced by a `<picture>` with one AVIF source (widths ≤ 1200),
     <source
       type="image/avif"
       srcset="
-        https://teamtailorcdn.com/img/69145ecd988074cf311effb9/6936cefa0e7da753b2c8e43c_teamtailor-career-sites-full-grid-min-p-500.avif?width=500&quality=85&fit=contain&format=avif 500w,
-        https://teamtailorcdn.com/img/69145ecd988074cf311effb9/6936cefa0e7da753b2c8e43c_teamtailor-career-sites-full-grid-min-p-800.avif?width=800&quality=85&fit=contain&format=avif 800w,
-        https://teamtailorcdn.com/img/69145ecd988074cf311effb9/6936cefa0e7da753b2c8e43c_teamtailor-career-sites-full-grid-min-p-1080.avif?width=1080&quality=85&fit=contain&format=avif 1080w
+        https://teamtailorcdn.com/img/.../...-p-500.avif 500w,
+        https://teamtailorcdn.com/img/.../...-p-800.avif 800w,
+        ... 1080w, 1600w, 2000w, 2600w (passthrough, no query params),
+        https://teamtailorcdn.com/img/.../...-min.avif 3840w
       "
     />
     <source
       type="image/webp"
       srcset="
         https://teamtailorcdn.com/img/.../...-p-500.avif?width=500&quality=85&fit=contain&format=webp 500w,
-        https://teamtailorcdn.com/img/.../...-p-800.avif?width=800&quality=85&fit=contain&format=webp 800w,
-        https://teamtailorcdn.com/img/.../...-p-1080.avif?width=1080&quality=85&fit=contain&format=webp 1080w,
-        https://teamtailorcdn.com/img/.../...-p-1600.avif?width=1600&quality=85&fit=contain&format=webp 1600w,
-        https://teamtailorcdn.com/img/.../...-p-2000.avif?width=2000&quality=85&fit=contain&format=webp 2000w,
-        https://teamtailorcdn.com/img/.../...-p-2600.avif?width=2600&quality=85&fit=contain&format=webp 2600w,
-        https://teamtailorcdn.com/img/.../...-min.avif?width=3840&quality=85&fit=contain&format=webp 3840w
+        ... 800w–2600w ...
+        (no 3840w: that width is AVIF passthrough only)
       "
     />
     <img
       src="https://teamtailorcdn.com/img/.../...-p-500.avif?width=500&quality=85&fit=contain&format=webp"
-      srcset="...same 7 WebP URLs as above..."
+      srcset="...same 6 WebP URLs as above..."
       sizes="100vw"
       alt="Collage of diverse career site landing pages featuring job titles, people at work, and application buttons."
       class="c-case-grid_img"
@@ -86,9 +85,9 @@ The `<img>` is replaced by a `<picture>` with one AVIF source (widths ≤ 1200),
 </figure>
 ```
 
-- **AVIF source:** Only 500w, 800w, 1080w (≤ 1200px), so the AVIF width limit is respected.
-- **WebP source:** All 7 widths, with `format=webp` so the worker (and Cloudflare) can convert AVIF → WebP where needed.
-- **`<img>`:** Uses the WebP URLs so legacy or non-AVIF browsers still receive a valid image.
+- **AVIF source:** All 7 widths with passthrough URLs (no query params), so the worker caches each origin file and the browser can select e.g. 3840w AVIF.
+- **WebP source:** The 6 transformable widths (500–2600) with `format=webp`; 3840w is only in the AVIF source (passthrough), not converted to WebP.
+- **`<img>`:** Uses the WebP srcset (6 entries) so legacy or non-AVIF browsers get WebP; src is the first WebP or passthrough URL.
 
 ---
 

@@ -80,6 +80,21 @@ function isAvifUrl(url: string): boolean {
 	}
 }
 
+/**
+ * Extract pre-rendered width from origin URL path if present (e.g. -p-2600 in
+ * "...-p-2600.avif"). Used to only request widths the origin actually provides,
+ * avoiding scale-up failures (e.g. 3840w when the file is ...-min.avif with no -p-3840).
+ */
+function getWidthFromOriginUrl(url: string): number | undefined {
+	try {
+		const pathname = new URL(url).pathname;
+		const match = pathname.match(/-p-(\d+)(?=[.-]|$)/i);
+		return match ? parseInt(match[1], 10) : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
 /** When true, SVG URLs are left as-is (not rewritten). Default true. */
 function ignoreSvg(env: Env): boolean {
 	const v = env.IMAGE_REWRITE_IGNORE_SVG;
@@ -260,10 +275,16 @@ function imgUsesCdn(img: HTMLElement, env: Env): boolean {
 	return entries.some((e) => shouldRewriteUrl(e.url, env));
 }
 
+/** True when we can safely request a transform at this width (origin URL encodes this width, e.g. -p-2600). */
+function canTransformEntry(entry: SrcSetEntry): boolean {
+	const urlWidth = getWidthFromOriginUrl(entry.url);
+	return urlWidth !== undefined && urlWidth === entry.width;
+}
+
 /**
- * Build <picture> with AVIF (widths ≤ AVIF_MAX_WIDTH for Cloudflare) and WebP fallbacks, then replace img.
- * On Cloudflare, the AVIF source gets media="(max-width: 1200px)" so larger viewports use the WebP source
- * and the browser can select higher-resolution WebP (e.g. 2400w) instead of being limited to 1200w AVIF.
+ * Build <picture> with AVIF and WebP fallbacks, then replace img.
+ * For entries whose URL does not encode the width (e.g. ...-min.avif for 3840w), we use passthrough URLs
+ * (no query params) so the worker caches the origin file without transform; only transformable entries get WebP.
  */
 function replaceImgWithPicture(
 	img: HTMLElement,
@@ -273,18 +294,20 @@ function replaceImgWithPicture(
 	env: Env
 ): void {
 	const sizes = getSizesForImg(img, env);
-	// AVIF source: only widths ≤ AVIF_MAX_WIDTH (Cloudflare limit); Netlify we cap for consistency
+	// Entries we can request as WebP transform (origin URL has matching -p-WIDTH)
+	const webpEntries = entries.filter(canTransformEntry);
+	const webpSrcset =
+		webpEntries.length > 0
+			? webpEntries
+					.map(
+						(e) =>
+							`${buildTransformUrl(e.url, e.width, backend, workerOrigin, env, 'webp')} ${e.descriptor}`
+					)
+					.join(', ')
+			: '';
+	// AVIF source: Cloudflare uses passthrough (no params) for all AVIF URLs so we can include every width and still cache; Netlify uses transform, cap at AVIF_MAX_WIDTH for consistency.
 	const avifEntries =
-		backend === 'cloudflare'
-			? entries.filter((e) => e.width <= AVIF_MAX_WIDTH)
-			: entries;
-	const webpSrcset = entries
-		.map(
-			(e) =>
-				`${buildTransformUrl(e.url, e.width, backend, workerOrigin, env, 'webp')} ${e.descriptor}`
-		)
-		.join(', ');
-	// For AVIF sources on Cloudflare, use passthrough URLs (no query params) so the worker just caches the file and avoids ERROR 9520.
+		backend === 'cloudflare' ? entries : entries.filter((e) => e.width <= AVIF_MAX_WIDTH);
 	const avifSrcset =
 		avifEntries.length > 0
 			? avifEntries
@@ -304,22 +327,21 @@ function replaceImgWithPicture(
 					})
 					.join(', ')
 			: '';
-	const fallbackSrc = buildTransformUrl(
-		entries[0].url,
-		entries[0].width,
-		backend,
-		workerOrigin,
-		env,
-		'webp'
-	);
+	const fallbackSrc =
+		webpEntries.length > 0
+			? buildTransformUrl(
+					webpEntries[0].url,
+					webpEntries[0].width,
+					backend,
+					workerOrigin,
+					env,
+					'webp'
+				)
+			: buildPassthroughUrl(entries[0].url, backend, workerOrigin);
 	const alt = img.getAttribute('alt') ?? '';
 	const cls = img.getAttribute('class') ?? '';
 	const loading = img.getAttribute('loading') ?? '';
-	// On Cloudflare, AVIF is only available for widths ≤ AVIF_MAX_WIDTH. Use media so that for viewports > 1200px the browser skips AVIF and uses the WebP source, allowing it to select larger WebP images (e.g. 2400w) instead of capping at 1200w AVIF.
-	const avifMedia =
-		backend === 'cloudflare' && avifSrcset !== ''
-			? ` media="(max-width: ${AVIF_MAX_WIDTH}px)"`
-			: '';
+	const avifMedia = ''; // No media cap: AVIF source now includes all widths via passthrough when backend is Cloudflare.
 	const pictureHtml =
 		avifSrcset === ''
 			? `<picture><source type="image/webp" srcset="${escapeAttr(webpSrcset)}"><img src="${escapeAttr(fallbackSrc)}" srcset="${escapeAttr(webpSrcset)}" sizes="${escapeAttr(sizes)}" alt="${escapeAttr(alt)}" class="${escapeAttr(cls)}" loading="${escapeAttr(loading)}"></picture>`
@@ -351,43 +373,44 @@ function rewriteImgElement(
 		const entries = parseSrcSet(srcsetAttr);
 		const toRewrite = entries.filter((e) => shouldRewriteUrl(e.url, env));
 
-		// Picture with AVIF (widths ≤ 1200) + WebP fallback for all sources, including AVIF (worker can convert AVIF → WebP when format=webp)
+		// Picture with AVIF + WebP; entries without matching origin width use passthrough URL (no params) so we still cache.
 		if (pictureFallbacksEnabled(env) && toRewrite.length > 0) {
 			replaceImgWithPicture(img, toRewrite, backend, workerOrigin, env);
 			return;
 		}
 
 		const newEntries: string[] = [];
-		for (const { url, width, descriptor } of entries) {
-			if (shouldRewriteUrl(url, env)) {
+		for (const entry of entries) {
+			if (!shouldRewriteUrl(entry.url, env)) {
+				newEntries.push(`${entry.url} ${entry.descriptor}`);
+			} else if (canTransformEntry(entry)) {
 				newEntries.push(
-					`${buildTransformUrl(url, width, backend, workerOrigin, env)} ${descriptor}`
+					`${buildTransformUrl(entry.url, entry.width, backend, workerOrigin, env)} ${entry.descriptor}`
 				);
 			} else {
-				newEntries.push(`${url} ${descriptor}`);
+				// Origin URL doesn't encode this width (e.g. ...-min.avif for 3840w): use passthrough so we cache without transform.
+				newEntries.push(
+					`${buildPassthroughUrl(entry.url, backend, workerOrigin)} ${entry.descriptor}`
+				);
 			}
 		}
 		const newSrcset = newEntries.join(', ');
 		img.setAttribute('srcset', newSrcset);
-		const firstToRewrite = entries.find((e) => shouldRewriteUrl(e.url, env));
-		const fallbackSrc = firstToRewrite
-			? buildTransformUrl(
-					firstToRewrite.url,
-					firstToRewrite.width,
-					backend,
-					workerOrigin,
-					env
-				)
-			: (src && shouldRewriteUrl(src, env)
-					? buildTransformUrl(
-							src,
-							DEFAULT_WIDTH,
-							backend,
-							workerOrigin,
-							env
-						)
-					: src);
-		if (fallbackSrc) img.setAttribute('src', fallbackSrc);
+		const firstToRewrite = toRewrite[0];
+		const srcUrl = firstToRewrite
+			? canTransformEntry(firstToRewrite)
+				? buildTransformUrl(
+						firstToRewrite.url,
+						firstToRewrite.width,
+						backend,
+						workerOrigin,
+						env
+					)
+				: buildPassthroughUrl(firstToRewrite.url, backend, workerOrigin)
+			: src && shouldRewriteUrl(src, env)
+				? buildTransformUrl(src, DEFAULT_WIDTH, backend, workerOrigin, env)
+				: src;
+		if (srcUrl) img.setAttribute('src', srcUrl);
 		img.setAttribute('sizes', getSizesForImg(img, env));
 		return;
 	}
