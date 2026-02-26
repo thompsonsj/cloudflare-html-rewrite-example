@@ -262,7 +262,8 @@ function imgUsesCdn(img: HTMLElement, env: Env): boolean {
 
 /**
  * Build <picture> with AVIF (widths ≤ AVIF_MAX_WIDTH for Cloudflare) and WebP fallbacks, then replace img.
- * Only used when picture fallbacks are on and source is not AVIF.
+ * On Cloudflare, the AVIF source gets media="(max-width: 1200px)" so larger viewports use the WebP source
+ * and the browser can select higher-resolution WebP (e.g. 2400w) instead of being limited to 1200w AVIF.
  */
 function replaceImgWithPicture(
 	img: HTMLElement,
@@ -314,10 +315,15 @@ function replaceImgWithPicture(
 	const alt = img.getAttribute('alt') ?? '';
 	const cls = img.getAttribute('class') ?? '';
 	const loading = img.getAttribute('loading') ?? '';
+	// On Cloudflare, AVIF is only available for widths ≤ AVIF_MAX_WIDTH. Use media so that for viewports > 1200px the browser skips AVIF and uses the WebP source, allowing it to select larger WebP images (e.g. 2400w) instead of capping at 1200w AVIF.
+	const avifMedia =
+		backend === 'cloudflare' && avifSrcset !== ''
+			? ` media="(max-width: ${AVIF_MAX_WIDTH}px)"`
+			: '';
 	const pictureHtml =
 		avifSrcset === ''
 			? `<picture><source type="image/webp" srcset="${escapeAttr(webpSrcset)}"><img src="${escapeAttr(fallbackSrc)}" srcset="${escapeAttr(webpSrcset)}" sizes="${escapeAttr(sizes)}" alt="${escapeAttr(alt)}" class="${escapeAttr(cls)}" loading="${escapeAttr(loading)}"></picture>`
-			: `<picture><source type="image/avif" srcset="${escapeAttr(avifSrcset)}"><source type="image/webp" srcset="${escapeAttr(webpSrcset)}"><img src="${escapeAttr(fallbackSrc)}" srcset="${escapeAttr(webpSrcset)}" sizes="${escapeAttr(sizes)}" alt="${escapeAttr(alt)}" class="${escapeAttr(cls)}" loading="${escapeAttr(loading)}"></picture>`;
+			: `<picture><source type="image/avif" srcset="${escapeAttr(avifSrcset)}"${avifMedia}><source type="image/webp" srcset="${escapeAttr(webpSrcset)}"><img src="${escapeAttr(fallbackSrc)}" srcset="${escapeAttr(webpSrcset)}" sizes="${escapeAttr(sizes)}" alt="${escapeAttr(alt)}" class="${escapeAttr(cls)}" loading="${escapeAttr(loading)}"></picture>`;
 	const parsed = parse(pictureHtml);
 	const picture =
 		parsed.tagName?.toLowerCase() === 'picture'
