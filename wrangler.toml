@@ -35,8 +35,8 @@ DEBUG_LOGS = "1"
 GTM_CONTAINER_ID = "GTM-593GQ2S"
 
 # SHOP_URL value should use canonical www/non-www form to avoid redirects
-# SHOP_URL = "https://teamtailorcdn.com/"
-SHOP_URL = "https://teamtailor-34da6c.webflow.io/"
+SHOP_URL = "https://teamtailorcdn.com/"
+# SHOP_URL = "https://teamtailor-34da6c.webflow.io/"
 # Optional: set to a base URL (e.g. Firebase Storage) to enable /img/* transformations
 IMAGE_ORIGIN_URL = "https://cdn.prod.website-files.com"
 IMAGE_REWRITE_BACKEND = "cloudflare"
