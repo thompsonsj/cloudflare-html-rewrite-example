@@ -8,8 +8,12 @@
  * @see https://docs.netlify.com/build/image-cdn/overview/
  */
 
+import { parse } from 'node-html-parser';
 import type { HTMLElement } from 'node-html-parser';
 import type { Env } from './types/env';
+
+/** Cloudflare AVIF hard limit; only use format=avif for widths ≤ this in picture fallbacks. */
+const AVIF_MAX_WIDTH = 1200;
 
 /** Img src prefix we rewrite to transformation URLs (Cloudflare or Netlify). */
 export const CDN_SOURCE_PREFIX = 'https://cdn.prod.website-files.com/';
@@ -68,6 +72,14 @@ function isSvgUrl(url: string): boolean {
 	}
 }
 
+function isAvifUrl(url: string): boolean {
+	try {
+		return /\.avif$/i.test(new URL(url).pathname);
+	} catch {
+		return false;
+	}
+}
+
 /** When true, SVG URLs are left as-is (not rewritten). Default true. */
 function ignoreSvg(env: Env): boolean {
 	const v = env.IMAGE_REWRITE_IGNORE_SVG;
@@ -79,6 +91,21 @@ function shouldRewriteUrl(url: string, env: Env): boolean {
 	if (!url.startsWith(CDN_SOURCE_PREFIX)) return false;
 	if (isSvgUrl(url) && ignoreSvg(env)) return false;
 	return true;
+}
+
+function pictureFallbacksEnabled(env: Env): boolean {
+	const v = env.IMAGE_REWRITE_PICTURE_FALLBACKS;
+	return v === undefined || v === '' || v === '1' || v.toLowerCase() === 'true';
+}
+
+/** Escape for HTML attribute. */
+function escapeAttr(s: string | undefined): string {
+	if (s == null) return '';
+	return String(s)
+		.replace(/&/g, '&amp;')
+		.replace(/"/g, '&quot;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;');
 }
 
 /** Parse comma-separated full-width class names from env; returns trimmed non-empty list. */
@@ -110,18 +137,25 @@ function getSizesForImg(img: HTMLElement, env: Env): string {
 /**
  * Build a single transformation URL for the given original image URL and width.
  * Quality and format come from env (IMAGE_REWRITE_QUALITY, IMAGE_REWRITE_FORMAT).
+ * formatOverride: when building <picture> fallbacks, pass 'avif' or 'webp'. For Cloudflare avif, caller should only use widths ≤ AVIF_MAX_WIDTH.
  */
 function buildTransformUrl(
 	originalSrc: string,
 	width: number,
 	backend: 'cloudflare' | 'netlify',
 	workerOrigin: string,
-	env: Env
+	env: Env,
+	formatOverride?: 'avif' | 'webp'
 ): string {
 	const quality = getQuality(env);
 	const formatMode = env.IMAGE_REWRITE_FORMAT ?? 'auto';
-	const format =
-		formatMode === 'preserve' ? getFormatFromUrl(originalSrc) : undefined;
+	let format: string | undefined;
+	if (formatOverride) {
+		format = formatOverride;
+	} else {
+		format =
+			formatMode === 'preserve' ? getFormatFromUrl(originalSrc) : undefined;
+	}
 
 	if (backend === 'netlify') {
 		const base = (env.NETLIFY_IMAGE_CDN_BASE ?? '').replace(/\/$/, '');
@@ -202,9 +236,64 @@ function imgUsesCdn(img: HTMLElement, env: Env): boolean {
 }
 
 /**
+ * Build <picture> with AVIF (widths ≤ AVIF_MAX_WIDTH for Cloudflare) and WebP fallbacks, then replace img.
+ * Only used when picture fallbacks are on and source is not AVIF.
+ */
+function replaceImgWithPicture(
+	img: HTMLElement,
+	entries: SrcSetEntry[],
+	backend: 'cloudflare' | 'netlify',
+	workerOrigin: string,
+	env: Env
+): void {
+	const sizes = getSizesForImg(img, env);
+	// AVIF source: only widths ≤ AVIF_MAX_WIDTH (Cloudflare limit); Netlify we cap for consistency
+	const avifEntries =
+		backend === 'cloudflare'
+			? entries.filter((e) => e.width <= AVIF_MAX_WIDTH)
+			: entries;
+	const webpSrcset = entries
+		.map(
+			(e) =>
+				`${buildTransformUrl(e.url, e.width, backend, workerOrigin, env, 'webp')} ${e.descriptor}`
+		)
+		.join(', ');
+	const avifSrcset =
+		avifEntries.length > 0
+			? avifEntries
+					.map(
+						(e) =>
+							`${buildTransformUrl(e.url, e.width, backend, workerOrigin, env, 'avif')} ${e.descriptor}`
+					)
+					.join(', ')
+			: '';
+	const fallbackSrc = buildTransformUrl(
+		entries[0].url,
+		entries[0].width,
+		backend,
+		workerOrigin,
+		env,
+		'webp'
+	);
+	const alt = img.getAttribute('alt') ?? '';
+	const cls = img.getAttribute('class') ?? '';
+	const loading = img.getAttribute('loading') ?? '';
+	const pictureHtml =
+		avifSrcset === ''
+			? `<picture><source type="image/webp" srcset="${escapeAttr(webpSrcset)}"><img src="${escapeAttr(fallbackSrc)}" srcset="${escapeAttr(webpSrcset)}" sizes="${escapeAttr(sizes)}" alt="${escapeAttr(alt)}" class="${escapeAttr(cls)}" loading="${escapeAttr(loading)}"></picture>`
+			: `<picture><source type="image/avif" srcset="${escapeAttr(avifSrcset)}"><source type="image/webp" srcset="${escapeAttr(webpSrcset)}"><img src="${escapeAttr(fallbackSrc)}" srcset="${escapeAttr(webpSrcset)}" sizes="${escapeAttr(sizes)}" alt="${escapeAttr(alt)}" class="${escapeAttr(cls)}" loading="${escapeAttr(loading)}"></picture>`;
+	const parsed = parse(pictureHtml);
+	const picture =
+		parsed.tagName?.toLowerCase() === 'picture'
+			? parsed
+			: parsed.querySelector('picture');
+	if (picture) img.replaceWith(picture);
+}
+
+/**
  * Rewrite one <img>: replace CDN URLs in src and srcset with transformation URLs.
- * Preserves existing sizes when present; uses default widths when img has no srcset.
- * Mutates the element in place.
+ * When IMAGE_REWRITE_PICTURE_FALLBACKS is on and source is not AVIF, wrap in <picture> with AVIF + WebP.
+ * Mutates the element in place (or replaces with picture).
  */
 function rewriteImgElement(
 	img: HTMLElement,
@@ -218,6 +307,14 @@ function rewriteImgElement(
 	// Case 1: img has srcset with CDN URLs — rewrite each entry that should be rewritten, keep SVG/origin when ignore SVG
 	if (srcsetAttr && srcsetAttr.includes(CDN_SOURCE_PREFIX)) {
 		const entries = parseSrcSet(srcsetAttr);
+		const toRewrite = entries.filter((e) => shouldRewriteUrl(e.url, env));
+
+		// Picture with AVIF (widths ≤ 1200) + WebP fallback for all sources, including AVIF (worker can convert AVIF → WebP when format=webp)
+		if (pictureFallbacksEnabled(env) && toRewrite.length > 0) {
+			replaceImgWithPicture(img, toRewrite, backend, workerOrigin, env);
+			return;
+		}
+
 		const newEntries: string[] = [];
 		for (const { url, width, descriptor } of entries) {
 			if (shouldRewriteUrl(url, env)) {
@@ -230,7 +327,6 @@ function rewriteImgElement(
 		}
 		const newSrcset = newEntries.join(', ');
 		img.setAttribute('srcset', newSrcset);
-		// Fallback src: first URL we rewrote, or first CDN we would rewrite, or existing src
 		const firstToRewrite = entries.find((e) => shouldRewriteUrl(e.url, env));
 		const fallbackSrc = firstToRewrite
 			? buildTransformUrl(
@@ -256,6 +352,17 @@ function rewriteImgElement(
 
 	// Case 2: plain img (no srcset or srcset without CDN) — only src is CDN
 	if (!src || !shouldRewriteUrl(src, env)) return;
+
+	const syntheticEntries: SrcSetEntry[] = RESPONSIVE_WIDTHS.map((w) => ({
+		url: src,
+		width: w,
+		descriptor: `${w}w`,
+	}));
+
+	if (pictureFallbacksEnabled(env)) {
+		replaceImgWithPicture(img, syntheticEntries, backend, workerOrigin, env);
+		return;
+	}
 
 	const defaultUrl = buildTransformUrl(
 		src,
