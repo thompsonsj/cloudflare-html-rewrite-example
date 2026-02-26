@@ -130,22 +130,26 @@ export async function handleImageRequest(
 		return new Response('Disallowed image source', { status: 403 });
 	}
 
+	// For passthrough (SVG/AVIF as-is) we fetch the origin URL only — no query params — so we never trigger resize/format and avoid ERROR 9520. Use cacheKey so all request URLs for the same file share one cache entry.
+	const passthroughCacheCf = {
+		cacheEverything: true,
+		cacheKey: originUrl,
+		cacheTtlByStatus: {
+			'200-299': CACHE_TTL_OK,
+			'300-399': 300,
+			'400-499': CACHE_TTL_CLIENT_ERROR,
+			'500-599': CACHE_TTL_SERVER_ERROR,
+		},
+	};
+
 	const imageRequest = new Request(originUrl, {
 		headers: request.headers,
 	});
 
-	// SVG: no transformation — fetch from origin and serve as-is
+	// SVG: no transformation — fetch from origin (no query) and serve as-is
 	if (SVG_EXT_RE.test(path)) {
 		const response = await fetch(imageRequest, {
-			cf: {
-				cacheEverything: true,
-				cacheTtlByStatus: {
-					'200-299': CACHE_TTL_OK,
-					'300-399': 300,
-					'400-499': CACHE_TTL_CLIENT_ERROR,
-					'500-599': CACHE_TTL_SERVER_ERROR,
-				},
-			},
+			cf: passthroughCacheCf,
 		});
 		if (!response.ok && !response.redirected) return response;
 		const out = new Response(response.body, response);
@@ -154,22 +158,14 @@ export async function handleImageRequest(
 		return out;
 	}
 
-	// AVIF source: serve as-is only when no format conversion is requested. When format=webp (or format=avif) is in the query, use normal transform so Cloudflare can convert AVIF → WebP for fallbacks.
+	// AVIF source: serve as-is only when no format conversion is requested. Fetch origin URL with no query params so we only cache the file; query params on the client request must not be sent to origin or used for transform (avoids ERROR 9520). When format=webp is in the query, use normal transform for fallbacks.
 	const requestUrl = new URL(request.url);
 	const avifPassthrough =
 		AVIF_EXT_RE.test(path) && !requestUrl.searchParams.has('format');
 
 	if (avifPassthrough) {
 		const response = await fetch(imageRequest, {
-			cf: {
-				cacheEverything: true,
-				cacheTtlByStatus: {
-					'200-299': CACHE_TTL_OK,
-					'300-399': 300,
-					'400-499': CACHE_TTL_CLIENT_ERROR,
-					'500-599': CACHE_TTL_SERVER_ERROR,
-				},
-			},
+			cf: passthroughCacheCf,
 		});
 		if (!response.ok && !response.redirected) return response;
 		const out = new Response(response.body, response);
