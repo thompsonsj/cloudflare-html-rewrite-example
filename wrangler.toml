@@ -23,6 +23,8 @@ IMAGE_REWRITE_BACKEND = "cloudflare"
 IMAGE_REWRITE_IGNORE_SVG = "1"
 # Optional: comma-separated CSS classes for full-width images. If an img has one of these, sizes is set to 100vw (fixes e.g. Webflow hero)
 IMAGE_REWRITE_FULL_WIDTH_CLASSES = "c-hero-intro_media, c-hero-dash_figure"
+# Optional: wrap rewritten img in <picture> with AVIF + WebP (default on). "0"/"false" to disable.
+IMAGE_REWRITE_PICTURE_FALLBACKS = "1"
 
 [env.dev]
 workers_dev = true
@@ -33,7 +35,8 @@ DEBUG_LOGS = "1"
 GTM_CONTAINER_ID = "GTM-593GQ2S"
 
 # SHOP_URL value should use canonical www/non-www form to avoid redirects
-SHOP_URL = "https://teamtailorcdn.com/"
+# SHOP_URL = "https://teamtailorcdn.com/"
+SHOP_URL = "https://teamtailor-34da6c.webflow.io/"
 # Optional: set to a base URL (e.g. Firebase Storage) to enable /img/* transformations
 IMAGE_ORIGIN_URL = "https://cdn.prod.website-files.com"
 IMAGE_REWRITE_BACKEND = "cloudflare"
@@ -42,6 +45,7 @@ IMAGE_REWRITE_BACKEND = "cloudflare"
 # IMAGE_REWRITE_FORMAT = "auto"
 IMAGE_REWRITE_IGNORE_SVG = "1"
 IMAGE_REWRITE_FULL_WIDTH_CLASSES = "c-hero-intro_media, c-hero-dash_figure"
+IMAGE_REWRITE_PICTURE_FALLBACKS = "1"
 
 [observability]
 enabled = false

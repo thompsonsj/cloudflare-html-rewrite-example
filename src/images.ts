@@ -16,6 +16,10 @@ import type { Env } from './types/env';
 const RASTER_EXT_RE = /\.(jpe?g|png|gif|webp|avif)$/i;
 /** SVG: serve as-is from origin (no transformation or quality). */
 const SVG_EXT_RE = /\.svg$/i;
+/** AVIF source: serve as-is (no transform); Cloudflare can sanitize SVG but AVIF transform is overkill. */
+const AVIF_EXT_RE = /\.avif$/i;
+/** Cloudflare AVIF hard limit (longest side). Beyond this we force WebP. @see https://developers.cloudflare.com/images/transform-images/#format-limitations */
+const AVIF_MAX_WIDTH = 1200;
 
 /** One year TTL for successful image responses */
 const CACHE_TTL_OK = 31_536_000;
@@ -60,6 +64,11 @@ function getImageOptions(request: Request, url: URL): Record<string, unknown> {
 		const accept = request.headers.get('Accept') ?? '';
 		if (/image\/avif/.test(accept)) options.format = 'avif';
 		else if (/image\/webp/.test(accept)) options.format = 'webp';
+	}
+	// Cloudflare AVIF hard limit: beyond AVIF_MAX_WIDTH use WebP to avoid failed or fallback encodes
+	const w = options.width as number | undefined;
+	if (options.format === 'avif' && typeof w === 'number' && w > AVIF_MAX_WIDTH) {
+		options.format = 'webp';
 	}
 	if (url.searchParams.has('dpr')) {
 		const dpr = parseFloat(url.searchParams.get('dpr') ?? '1');
@@ -125,7 +134,7 @@ export async function handleImageRequest(
 		headers: request.headers,
 	});
 
-	// SVG: no transformation or quality — fetch from origin and serve as-is (fixes empty SVG in production)
+	// SVG: no transformation — fetch from origin and serve as-is
 	if (SVG_EXT_RE.test(path)) {
 		const response = await fetch(imageRequest, {
 			cf: {
@@ -145,10 +154,33 @@ export async function handleImageRequest(
 		return out;
 	}
 
-	const url = new URL(request.url);
-	const imageOptions = getImageOptions(request, url);
+	// AVIF source: serve as-is only when no format conversion is requested. When format=webp (or format=avif) is in the query, use normal transform so Cloudflare can convert AVIF → WebP for fallbacks.
+	const requestUrl = new URL(request.url);
+	const avifPassthrough =
+		AVIF_EXT_RE.test(path) && !requestUrl.searchParams.has('format');
 
-	// Raster: fetch with Cloudflare Image Resizing + cache
+	if (avifPassthrough) {
+		const response = await fetch(imageRequest, {
+			cf: {
+				cacheEverything: true,
+				cacheTtlByStatus: {
+					'200-299': CACHE_TTL_OK,
+					'300-399': 300,
+					'400-499': CACHE_TTL_CLIENT_ERROR,
+					'500-599': CACHE_TTL_SERVER_ERROR,
+				},
+			},
+		});
+		if (!response.ok && !response.redirected) return response;
+		const out = new Response(response.body, response);
+		out.headers.set('Content-Type', response.headers.get('Content-Type') ?? 'image/avif');
+		out.headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+		return out;
+	}
+
+	const imageOptions = getImageOptions(request, requestUrl);
+
+	// Raster (or AVIF with format=webp): fetch with Cloudflare Image Resizing + cache
 	const response = await fetch(imageRequest, {
 		cf: {
 			image: imageOptions as Record<string, string | number | boolean>,
