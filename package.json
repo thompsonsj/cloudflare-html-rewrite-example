@@ -6,11 +6,14 @@
 		"dev:local": "wrangler dev --live-reload --env dev",
 		"dev:remote": "wrangler dev --remote --env dev",
 		"deploy:staging": "wrangler deploy --env dev",
-		"deploy:production": "wrangler deploy"
+		"deploy:production": "wrangler deploy",
+		"test": "vitest run",
+		"test:watch": "vitest"
 	},
 	"devDependencies": {
 		"@cloudflare/workers-types": "^4.20260203.0",
 		"typescript": "^5.9.3",
+		"vitest": "^4.1.0",
 		"wrangler": "^4.62.0"
 	},
 	"dependencies": {

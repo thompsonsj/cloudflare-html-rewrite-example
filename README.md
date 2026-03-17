@@ -31,6 +31,7 @@ Steps:
 1. Install dependencies: `npm i`
 2. Run `npm run dev:remote`
 3. Visit <http://localhost:8787/>
+4. Run `npm run test` to run canonical/hreflang path tests.
 
 The upstream origin is defined by `SHOP_URL` in `wrangler.toml`.
 
@@ -134,3 +135,5 @@ The worker removes any existing canonical and hreflang tags and injects the foll
 <link rel="alternate" hreflang="sv" href="https://www.teamtailor.com/sv/">
 <link rel="alternate" hreflang="x-default" href="https://www.teamtailor.com/en/">
 ```
+
+For subpages, Webflow locale path segments (`en-gb`, `en-us`, `de-de`, `fr-fr`, `es-es`) are stripped so that the same page in every locale points to the locale-agnostic path. For example, a request to `/de-de/demo` produces canonical and hreflang URLs like `/en/demo/`, `/de/demo/`, `/es/demo/` (the `de-de` segment is not repeated in the URLs). Run `npm run test` to assert homepage and subpage behaviour.
