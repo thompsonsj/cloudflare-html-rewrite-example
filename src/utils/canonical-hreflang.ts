@@ -1,26 +1,25 @@
 /**
  * Path and locale handling for canonical and hreflang links.
- * Strips Webflow locale path segments so subpages like /de-de/demo produce
- * hreflang paths /en/demo, /de/demo, etc. (not /en/de-de/demo).
+ * Strips Webflow locale path segments so subpages like /de/demo produce
+ * hreflang paths /en/demo, /de/demo, etc. (not /en/de/demo).
  *
  * Webflow locale path segments (stripped from request path):
- * en-gb, en-us, de-de, fr-fr, es-es
- * These map to proxied site locales: en, en-us, de, fr, es.
+ * en (replaces root), en-us, de, fr, es
  */
 
 /** First path segments that indicate a Webflow locale; strip them to get the locale-agnostic path. */
 export const WEBFLOW_LOCALE_SEGMENTS = [
-	'en-gb',
+	'en',
 	'en-us',
-	'de-de',
-	'fr-fr',
-	'es-es',
+	'de',
+	'fr',
+	'es',
 ] as const;
 
 /**
  * Returns the path suffix used to build canonical and hreflang URLs.
  * - Root "/" or "" → "/" (so /en/, /de/, etc.)
- * - /de-de/demo or /de-de/demo/ → "/demo/" (so /en/demo/, /de/demo/, etc.)
+ * - /de/demo or /en/demo/ → "/demo/" (so /en/demo/, /de/demo/, etc.)
  * - Paths without a known Webflow locale prefix are left as-is (with trailing slash).
  */
 export function getPathSuffix(pathname: string): string {

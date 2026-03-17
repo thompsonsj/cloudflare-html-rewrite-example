@@ -23,20 +23,21 @@ describe('canonical-hreflang', () => {
 		});
 
 		it('strips Webflow locale segment so subpage path has no locale prefix', () => {
-			expect(getPathSuffix('/de-de/demo')).toBe('/demo/');
-			expect(getPathSuffix('/de-de/demo/')).toBe('/demo/');
+			expect(getPathSuffix('/de/demo')).toBe('/demo/');
+			expect(getPathSuffix('/de/demo/')).toBe('/demo/');
 		});
 
-		it('strips other Webflow locale segments', () => {
-			expect(getPathSuffix('/en-gb/about')).toBe('/about/');
+		it('strips other Webflow locale segments (en, en-us, fr, es)', () => {
+			expect(getPathSuffix('/en/about')).toBe('/about/');
+			expect(getPathSuffix('/en')).toBe('/');
 			expect(getPathSuffix('/en-us/pricing')).toBe('/pricing/');
-			expect(getPathSuffix('/fr-fr/contact')).toBe('/contact/');
-			expect(getPathSuffix('/es-es/blog')).toBe('/blog/');
+			expect(getPathSuffix('/fr/contact')).toBe('/contact/');
+			expect(getPathSuffix('/es/blog')).toBe('/blog/');
 		});
 
 		it('leaves path unchanged when first segment is not a Webflow locale', () => {
-			expect(getPathSuffix('/en/demo')).toBe('/en/demo/');
 			expect(getPathSuffix('/demo')).toBe('/demo/');
+			expect(getPathSuffix('/da/something')).toBe('/da/something/');
 		});
 	});
 
@@ -71,38 +72,34 @@ describe('canonical-hreflang', () => {
 		});
 	});
 
-	describe('subpage /de-de/demo: hreflang paths must not contain de-de', () => {
-		it('pathSuffix for /de-de/demo is /demo/ (no de-de)', () => {
-			expect(getPathSuffix('/de-de/demo')).toBe('/demo/');
-			expect(getPathSuffix('/de-de/demo/')).toBe('/demo/');
+	describe('subpage /de/demo: hreflang paths use locale-agnostic /demo/', () => {
+		it('pathSuffix for /de/demo is /demo/', () => {
+			expect(getPathSuffix('/de/demo')).toBe('/demo/');
+			expect(getPathSuffix('/de/demo/')).toBe('/demo/');
 		});
 		it('canonical is https://www.teamtailor.com/en/demo/', () => {
-			const pathSuffix = getPathSuffix('/de-de/demo');
+			const pathSuffix = getPathSuffix('/de/demo');
 			expect(buildCanonical(pathSuffix)).toBe('https://www.teamtailor.com/en/demo/');
 		});
-		it('hreflang URLs are /en/demo/, /es/demo/, /de/demo/ etc. (no de-de in path)', () => {
-			const pathSuffix = getPathSuffix('/de-de/demo');
+		it('hreflang URLs are /en/demo/, /es/demo/, /de/demo/ etc.', () => {
+			const pathSuffix = getPathSuffix('/de/demo');
 			const links = buildHreflangLinks(pathSuffix);
 			expect(links).toContain('https://www.teamtailor.com/en/demo/');
 			expect(links).toContain('https://www.teamtailor.com/en-us/demo/');
 			expect(links).toContain('https://www.teamtailor.com/de/demo/');
 			expect(links).toContain('https://www.teamtailor.com/es/demo/');
 			expect(links).toContain('https://www.teamtailor.com/fr/demo/');
-			// Must not contain de-de in any URL
-			links.forEach((href) => {
-				expect(href).not.toContain('de-de');
-			});
 			expect(links).toHaveLength(ALTERNATE_LANGUAGES.length);
 		});
 	});
 
 	describe('WEBFLOW_LOCALE_SEGMENTS', () => {
-		it('includes expected Webflow locale path segments', () => {
-			expect(WEBFLOW_LOCALE_SEGMENTS).toContain('en-gb');
+		it('includes expected Webflow locale path segments (en, en-us, de, fr, es)', () => {
+			expect(WEBFLOW_LOCALE_SEGMENTS).toContain('en');
 			expect(WEBFLOW_LOCALE_SEGMENTS).toContain('en-us');
-			expect(WEBFLOW_LOCALE_SEGMENTS).toContain('de-de');
-			expect(WEBFLOW_LOCALE_SEGMENTS).toContain('fr-fr');
-			expect(WEBFLOW_LOCALE_SEGMENTS).toContain('es-es');
+			expect(WEBFLOW_LOCALE_SEGMENTS).toContain('de');
+			expect(WEBFLOW_LOCALE_SEGMENTS).toContain('fr');
+			expect(WEBFLOW_LOCALE_SEGMENTS).toContain('es');
 		});
 	});
 });
