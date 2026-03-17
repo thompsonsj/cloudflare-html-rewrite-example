@@ -3,6 +3,7 @@ import { Env } from './types/env';
 import { handleImageRequest } from './images';
 import { rewriteResponsiveImages } from './responsive-images';
 import { matchesDisabledRoute } from './utils/routes';
+import { getPathSuffix, getEnPath } from './utils/canonical-hreflang';
 
 const IMAGE_PATH_PREFIX = '/img/';
 
@@ -23,9 +24,8 @@ export default {
 				console.log(`[html-rewrite] ${message}`, ...args);
 			}
 		};
-		const rawPath = url.pathname === '/' ? '' : url.pathname.replace(/\/$/, '');
-		const enPath = rawPath === '' ? '/en/' : `/en${rawPath}/`;
-		const pathSuffix = enPath.replace(/^\/en/, '');
+		const pathSuffix = getPathSuffix(url.pathname);
+		const enPath = getEnPath(pathSuffix);
 		const alternateLanguages = ['en', 'en-us', 'da', 'de', 'es', 'fi', 'fr', 'it', 'nl', 'no', 'sv'];
 		debug('url.pathname:', url.pathname);
 		debug('enPath:', enPath, 'pathSuffix:', pathSuffix);
