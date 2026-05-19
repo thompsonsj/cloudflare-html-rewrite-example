@@ -17,6 +17,7 @@ In `src/index.ts`, the worker:
 - Proxies the upstream HTML.
 - Removes any existing `canonical` and `alternate` tags from `<head>`.
 - Injects a new canonical and hreflang set based on the request path.
+- Rewrites `<a href>` links from `teamtailorcdn.com` to `www.teamtailor.com` (Webflow internal links can stay on the CDN host in the CMS; `/img/*` URLs are not rewritten).
 - Adds a small demo block after `#header` to show the rewrite in action.
 
 ## Local development
