@@ -1,72 +1,34 @@
-name = "cloudflare-html-rewrite-example"
-main = "src/index.ts"
-compatibility_date = "2023-12-18"
+name = "teamtailor-assets"
+main = "src/assets.ts"
+compatibility_date = "2026-02-01"
 
-# Production: no workers.dev URL. Routes are configured in the Cloudflare dashboard
-# (Workers & Pages → this worker → Settings → Domains & Routes), not in this file.
-# "No deploy targets" on deploy only means wrangler did not add routes from config;
-# the worker upload still succeeds and existing dashboard routes use the new version.
+# Served only on the custom domain below, never on *.workers.dev.
 workers_dev = false
 
-# Optional: manage routes from wrangler instead of the dashboard (uncomment and set zone):
-# [[routes]]
-# pattern = "teamtailorcdn.com/*"
-# zone_name = "teamtailorcdn.com"
+# assets.teamtailorcdn.com must not be attached to anything else (for example an
+# R2 bucket's custom domain) before the first deploy, or the deploy will fail.
+routes = [
+	{ pattern = "assets.teamtailorcdn.com", custom_domain = true }
+]
 
 [vars]
 ENVIRONMENT = "production"
 DEBUG_LOGS = "0"
-GTM_CONTAINER_ID = "GTM-593GQ2S"
-# Optional: base URL for image transformation origin (e.g. https://storage.googleapis.com/your-bucket).
-# When set, requests to /img/* are served as resized images; see src/images.ts
-IMAGE_ORIGIN_URL = "https://cdn.prod.website-files.com"
-# Optional: rewrite HTML img src (cdn.prod.website-files.com) to responsive images. Set to "cloudflare" or "netlify"
-IMAGE_REWRITE_BACKEND = "cloudflare"
-# For netlify backend only: base URL of the site (e.g. https://www.teamtailor.com)
-# NETLIFY_IMAGE_CDN_BASE = "https://www.teamtailor.com"
-# Optional: quality for rewritten images (1-100, default 85)
-# IMAGE_REWRITE_QUALITY = "85"
-# Optional: "auto" = content negotiation (AVIF/WebP); "preserve" = keep original format from file extension
-# IMAGE_REWRITE_FORMAT = "auto"
-# Ignore SVG in HTML rewrite (default: true). "1"/"true" = leave SVG URLs as-is; "0"/"false" = rewrite to /img/... (served as-is by worker)
-IMAGE_REWRITE_IGNORE_SVG = "1"
-# Optional: comma-separated CSS classes for full-width images. If an img has one of these, sizes is set to 100vw (fixes e.g. Webflow hero)
-IMAGE_REWRITE_FULL_WIDTH_CLASSES = "c-hero-intro_media, c-hero-dash_figure"
-# Optional: wrap rewritten img in <picture> with AVIF + WebP (default on). "0"/"false" to disable.
-IMAGE_REWRITE_PICTURE_FALLBACKS = "1"
+# The Payload CMS on Payload Cloud. If the CMS moves, change this and redeploy:
+# every published asset URL on assets.teamtailorcdn.com keeps working.
+ORIGIN_URL = "https://tt.payloadcms.app"
 
 [env.dev]
+name = "teamtailor-assets-dev"
 workers_dev = true
+routes = []
 
 [env.dev.vars]
 ENVIRONMENT = "development"
 DEBUG_LOGS = "1"
-GTM_CONTAINER_ID = "GTM-593GQ2S"
-
-# SHOP_URL value should use canonical www/non-www form to avoid redirects
-SHOP_URL = "https://teamtailorcdn.com/"
-# SHOP_URL = "https://teamtailor-34da6c.webflow.io/"
-# Optional: set to a base URL (e.g. Firebase Storage) to enable /img/* transformations
-IMAGE_ORIGIN_URL = "https://cdn.prod.website-files.com"
-IMAGE_REWRITE_BACKEND = "cloudflare"
-# NETLIFY_IMAGE_CDN_BASE = "https://www.teamtailor.com"
-# IMAGE_REWRITE_QUALITY = "85"
-# IMAGE_REWRITE_FORMAT = "auto"
-IMAGE_REWRITE_IGNORE_SVG = "1"
-IMAGE_REWRITE_FULL_WIDTH_CLASSES = "c-hero-intro_media, c-hero-dash_figure"
-IMAGE_REWRITE_PICTURE_FALLBACKS = "1"
-
-[observability]
-enabled = false
-head_sampling_rate = 1
+ORIGIN_URL = "https://tt.payloadcms.app"
 
 [observability.logs]
 enabled = true
 head_sampling_rate = 1
-persist = true
 invocation_logs = true
-
-[observability.traces]
-enabled = false
-persist = true
-head_sampling_rate = 1
