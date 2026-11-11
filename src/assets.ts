@@ -22,8 +22,10 @@ const IMG_PREFIX = '/img/';
 
 /**
  * Edge and browser cache lifetimes, in seconds.
- * Form assets are built without content hashes, so a rebuild keeps the same file
- * names: keep their TTL short so a marketingcms deploy shows up within minutes.
+ * Form filenames contain a hash derived from the entry-point path (Parcel
+ * --no-content-hash mode), not from the file content. A rebuild keeps the same
+ * filename even when the content changes, so these files are not immutable.
+ * 5-minute TTL means a marketingcms deploy is live within about 5 minutes.
  */
 const CACHE: Record<AssetKind, { edge: number; browser: number }> = {
 	forms: { edge: 300, browser: 300 },
@@ -35,7 +37,7 @@ const CACHE_TTL_CLIENT_ERROR = 60;
 const FORWARDED_REQUEST_HEADERS = ['accept', 'accept-language', 'range', 'if-none-match', 'if-modified-since', 'user-agent'];
 
 /** Origin response headers that must not reach the client. */
-const STRIPPED_RESPONSE_HEADERS = ['set-cookie', 'x-powered-by'];
+const STRIPPED_RESPONSE_HEADERS = ['set-cookie', 'x-powered-by', 'netlify-cdn-cache-control'];
 
 const CORS_HEADERS = {
 	'Access-Control-Allow-Origin': '*',
