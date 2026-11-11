@@ -6,7 +6,7 @@
 		"dev:local": "wrangler dev --live-reload --env dev",
 		"dev:remote": "wrangler dev --remote --env dev",
 		"deploy:staging": "wrangler deploy --env dev",
-		"deploy:production": "wrangler deploy",
+		"deploy:production": "wrangler deploy --env=\"\"",
 		"test": "vitest run",
 		"test:watch": "vitest"
 	},
