@@ -128,6 +128,8 @@ export default {
 			return plain(200, 'ok');
 		}
 
+		const cache = caches.default;
+
 		// Resized images: /img/api/<collection>/file/<name>?width=...
 		if (url.pathname.startsWith(IMG_PREFIX)) {
 			const originPath = '/' + url.pathname.slice(IMG_PREFIX.length);
@@ -135,10 +137,19 @@ export default {
 				if (debug) console.log('[assets] 404 img', url.pathname);
 				return plain(404, 'Not found');
 			}
+
+			const cached = await cache.match(request.url);
+			if (cached) return cached;
+
 			const { headers } = buildOriginRequest(request, originBase, originPath);
 			const safeRequest = new Request(request.url, { method: 'GET', headers });
 			const imageResponse = await handleImageRequest(safeRequest, { ...env, IMAGE_ORIGIN_URL: originBase }, originPath);
-			return finaliseImage(imageResponse);
+			const response = finaliseImage(imageResponse);
+
+			if (request.method === 'GET' && response.ok) {
+				await cache.put(request.url, response.clone());
+			}
+			return response;
 		}
 
 		const kind = classifyPath(url.pathname);
@@ -146,6 +157,9 @@ export default {
 			if (debug) console.log('[assets] 404', url.pathname);
 			return plain(404, 'Not found');
 		}
+
+		const cached = await cache.match(request.url);
+		if (cached) return cached;
 
 		const originRequest = buildOriginRequest(request, originBase, url.pathname + url.search);
 		if (debug) console.log('[assets]', kind, originRequest.url);
@@ -162,6 +176,11 @@ export default {
 			},
 		});
 
-		return finaliseResponse(origin, kind);
+		const response = finaliseResponse(origin, kind);
+
+		if (request.method === 'GET' && response.ok) {
+			await cache.put(request.url, response.clone());
+		}
+		return response;
 	},
 };

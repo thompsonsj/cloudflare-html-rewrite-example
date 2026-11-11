@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import worker from './assets';
 import { classifyPath } from './paths';
 import type { Env } from './types/env';
@@ -14,6 +14,13 @@ function mockOrigin(response: Response) {
 	const fetchMock = vi.fn(async (_input: RequestInfo, _init?: RequestInit) => response);
 	vi.stubGlobal('fetch', fetchMock);
 	return fetchMock;
+}
+
+function mockCache(hit?: Response) {
+	const match = vi.fn(async () => hit ?? undefined);
+	const put = vi.fn(async () => undefined);
+	vi.stubGlobal('caches', { default: { match, put } });
+	return { match, put };
 }
 
 describe('classifyPath', () => {
@@ -49,6 +56,10 @@ describe('classifyPath', () => {
 });
 
 describe('worker', () => {
+	beforeEach(() => {
+		mockCache(); // default: cache miss, put is a no-op
+	});
+
 	it('returns 404 without calling the origin for disallowed paths', async () => {
 		const fetchMock = mockOrigin(new Response('should not be called'));
 		const res = await worker.fetch(new Request(`${BASE}/admin`), env);
@@ -141,5 +152,35 @@ describe('worker', () => {
 	it('serves a health check', async () => {
 		const res = await worker.fetch(new Request(`${BASE}/healthz`), env);
 		expect(res.status).toBe(200);
+	});
+
+	it('returns a cached response without calling the origin', async () => {
+		const cachedResponse = new Response('cached', {
+			status: 200,
+			headers: { 'Content-Type': 'application/javascript', 'Cache-Control': 'public, max-age=300' },
+		});
+		const { match } = mockCache(cachedResponse);
+		const fetchMock = mockOrigin(new Response('should not be called'));
+
+		const res = await worker.fetch(new Request(`${BASE}/forms/tt-form.js`), env);
+
+		expect(res.status).toBe(200);
+		expect(await res.text()).toBe('cached');
+		expect(match).toHaveBeenCalledWith(`${BASE}/forms/tt-form.js`);
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it('stores 2xx responses in the cache but not errors', async () => {
+		const { put } = mockCache();
+
+		mockOrigin(new Response('ok', { status: 200, headers: { 'Content-Type': 'application/javascript' } }));
+		await worker.fetch(new Request(`${BASE}/forms/tt-form.js`), env);
+		expect(put).toHaveBeenCalledOnce();
+
+		put.mockClear();
+
+		mockOrigin(new Response('missing', { status: 404 }));
+		await worker.fetch(new Request(`${BASE}/api/media/file/missing.png`), env);
+		expect(put).not.toHaveBeenCalled();
 	});
 });
