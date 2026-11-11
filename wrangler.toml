@@ -6,7 +6,7 @@ compatibility_date = "2026-02-01"
 workers_dev = false
 
 routes = [
-	{ pattern = "teamtailorcdn.com", custom_domain = true }
+	{ pattern = "teamtailorcdn.com/*", zone_name = "teamtailorcdn.com" }
 ]
 
 [vars]
