@@ -2,7 +2,16 @@ name = "cloudflare-html-rewrite-example"
 main = "src/index.ts"
 compatibility_date = "2023-12-18"
 
+# Production: no workers.dev URL. Routes are configured in the Cloudflare dashboard
+# (Workers & Pages → this worker → Settings → Domains & Routes), not in this file.
+# "No deploy targets" on deploy only means wrangler did not add routes from config;
+# the worker upload still succeeds and existing dashboard routes use the new version.
 workers_dev = false
+
+# Optional: manage routes from wrangler instead of the dashboard (uncomment and set zone):
+# [[routes]]
+# pattern = "teamtailorcdn.com/*"
+# zone_name = "teamtailorcdn.com"
 
 [vars]
 ENVIRONMENT = "production"

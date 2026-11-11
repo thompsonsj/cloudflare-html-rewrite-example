@@ -90,8 +90,10 @@ Requirements:
 
 Steps:
 
-1. Run `npm run deploy:production`
-2. Configure Workers Routes in Cloudflare
+1. Run `npm run deploy:production` (uploads the worker; use `--env=""` to target the top-level production config).
+2. Configure Workers Routes in Cloudflare (if not already set). Production routes are **not** defined in `wrangler.toml`; they live in the dashboard under **Workers & Pages → your worker → Settings → Domains & Routes**.
+
+If deploy prints **“No deploy targets”**, the worker still uploaded (check for `Current Version ID`). That message only means wrangler did not attach routes from the config file. Traffic on routes you configured in the dashboard will use the new version automatically.
 
 When setting routes, exclude common system and asset paths. Recommended disabled routes are listed in `src/config/recommended-disabled-routes.json`, and should be adjusted per project.
 
