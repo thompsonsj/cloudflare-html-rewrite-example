@@ -95,7 +95,7 @@ describe('worker', () => {
 		expect(res.status).toBe(200);
 		expect(await res.text()).toBe('console.log(1)');
 		expect(res.headers.get('Set-Cookie')).toBeNull();
-		expect(res.headers.get('Cache-Control')).toBe('public, max-age=300');
+		expect(res.headers.get('Cache-Control')).toBe('public, max-age=86400');
 		expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*');
 		expect(res.headers.get('Content-Security-Policy')).toBeNull();
 
@@ -104,7 +104,7 @@ describe('worker', () => {
 		expect(originRequest.headers.get('Cookie')).toBeNull();
 		expect(originRequest.headers.get('Authorization')).toBeNull();
 		expect(originRequest.headers.get('Accept')).toBe('*/*');
-		expect(init.cf.cacheTtlByStatus['200-299']).toBe(300);
+		expect(init.cf.cacheTtlByStatus['200-299']).toBe(86_400);
 	});
 
 	it('proxies upload files with a longer cache and a sandboxing CSP', async () => {

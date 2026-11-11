@@ -22,13 +22,11 @@ const IMG_PREFIX = '/img/';
 
 /**
  * Edge and browser cache lifetimes, in seconds.
- * Form filenames contain a hash derived from the entry-point path (Parcel
- * --no-content-hash mode), not from the file content. A rebuild keeps the same
- * filename even when the content changes, so these files are not immutable.
- * 5-minute TTL means a marketingcms deploy is live within about 5 minutes.
+ * Form filenames are not content-hashed, so a rebuild keeps the same filename.
+ * Cache is purged manually in Cloudflare after each marketingcms deploy.
  */
 const CACHE: Record<AssetKind, { edge: number; browser: number }> = {
-	forms: { edge: 300, browser: 300 },
+	forms: { edge: 86_400, browser: 86_400 },
 	upload: { edge: 86_400, browser: 3_600 },
 };
 const CACHE_TTL_CLIENT_ERROR = 60;
