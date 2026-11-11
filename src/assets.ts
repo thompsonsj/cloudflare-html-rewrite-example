@@ -159,10 +159,13 @@ export default {
 		}
 
 		const cached = await cache.match(request.url);
-		if (cached) return cached;
+		if (cached) {
+			if (debug) console.log('[assets] cache HIT', url.pathname);
+			return cached;
+		}
 
 		const originRequest = buildOriginRequest(request, originBase, url.pathname + url.search);
-		if (debug) console.log('[assets]', kind, originRequest.url);
+		if (debug) console.log('[assets] cache MISS', kind, originRequest.url);
 
 		const origin = await fetch(originRequest, {
 			cf: {
@@ -179,7 +182,11 @@ export default {
 		const response = finaliseResponse(origin, kind);
 
 		if (request.method === 'GET' && response.ok) {
-			await cache.put(request.url, response.clone());
+			try {
+				await cache.put(request.url, response.clone());
+			} catch (err) {
+				console.error('[assets] cache.put failed', url.pathname, err);
+			}
 		}
 		return response;
 	},
