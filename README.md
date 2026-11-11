@@ -2,9 +2,9 @@
 
 A Cloudflare Worker that serves public assets from the Payload CMS on a stable domain we control:
 
-**https://assets.teamtailorcdn.com/** → `https://tt.payloadcms.app/`
+**https://teamtailorcdn.com/** → `https://tt.payloadcms.app/`
 
-Use `assets.teamtailorcdn.com` URLs anywhere an asset is embedded outside the CMS: MCAE (Account Engagement) forms, layouts and emails, email signatures and templates. If the CMS ever moves, change `ORIGIN_URL` in `wrangler.toml` and redeploy; every published link keeps working.
+Use `teamtailorcdn.com` URLs anywhere an asset is embedded outside the CMS: MCAE (Account Engagement) forms, layouts and emails, email signatures and templates. If the CMS ever moves, change `ORIGIN_URL` in `wrangler.toml` and redeploy; every published link keeps working.
 
 > This repo previously held the Webflow HTML-rewrite worker for teamtailorcdn.com. That site has been retired; the old code is in git history.
 
@@ -24,9 +24,9 @@ The upload collections allowed are listed in `src/paths.ts` (`UPLOAD_COLLECTIONS
 ### Examples
 
 ```
-https://assets.teamtailorcdn.com/forms/tt-form.95a2a26e.min.js
-https://assets.teamtailorcdn.com/api/email/file/header.png
-https://assets.teamtailorcdn.com/img/api/media/file/photo.jpg?width=800&quality=80
+https://teamtailorcdn.com/forms/tt-form.95a2a26e.min.js
+https://teamtailorcdn.com/api/email/file/header.png
+https://teamtailorcdn.com/img/api/media/file/photo.jpg?width=800&quality=80
 ```
 
 Image options for `/img/*`: `width`, `height`, `fit` (scale-down, contain, cover, crop, pad, squeeze), `quality`, `format`, `dpr`, `blur`, `gravity`, `anim`. Without `format`, AVIF or WebP is chosen from the browser's `Accept` header.
@@ -55,14 +55,12 @@ npm run deploy:dev       # deploys teamtailor-assets-dev on *.workers.dev
 npm run deploy:production
 ```
 
-Before the **first** production deploy, `assets.teamtailorcdn.com` must not be attached to anything else in Cloudflare (for example as an R2 bucket's custom domain). Remove that first, or the deploy fails.
-
 ## Checking it works
 
 ```sh
-curl -sI https://assets.teamtailorcdn.com/healthz
-curl -sI https://assets.teamtailorcdn.com/forms/tt-form.95a2a26e.min.js
-curl -sI https://assets.teamtailorcdn.com/admin            # expect 404
+curl -sI https://teamtailorcdn.com/healthz
+curl -sI https://teamtailorcdn.com/forms/tt-form.95a2a26e.min.js
+curl -sI https://teamtailorcdn.com/admin            # expect 404
 ```
 
 Logs: Cloudflare dashboard → Workers & Pages → teamtailor-assets → Logs.

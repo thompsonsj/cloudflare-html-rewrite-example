@@ -2,20 +2,18 @@ name = "teamtailor-assets"
 main = "src/assets.ts"
 compatibility_date = "2026-02-01"
 
-# Served only on the custom domain below, never on *.workers.dev.
+# Served only on teamtailorcdn.com, never on *.workers.dev.
 workers_dev = false
 
-# assets.teamtailorcdn.com must not be attached to anything else (for example an
-# R2 bucket's custom domain) before the first deploy, or the deploy will fail.
 routes = [
-	{ pattern = "assets.teamtailorcdn.com", custom_domain = true }
+	{ pattern = "teamtailorcdn.com", custom_domain = true }
 ]
 
 [vars]
 ENVIRONMENT = "production"
 DEBUG_LOGS = "0"
 # The Payload CMS on Payload Cloud. If the CMS moves, change this and redeploy:
-# every published asset URL on assets.teamtailorcdn.com keeps working.
+# every published asset URL on teamtailorcdn.com keeps working.
 ORIGIN_URL = "https://tt.payloadcms.app"
 
 [env.dev]
