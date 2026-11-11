@@ -1,142 +1,66 @@
-# Cloudflare HTML Rewrite Example
+# teamtailor-assets
 
-This repo demonstrates a Cloudflare Worker that proxies HTML and rewrites the `<head>` to inject canonical and hreflang tags based on the requested path. It is a practical starting point for HTML customizations that must happen before the page reaches the browser.
+A Cloudflare Worker that serves public assets from the Payload CMS on a stable domain we control:
 
-## Why use a Worker
+**https://teamtailorcdn.com/** → `https://tt.payloadcms.app/`
 
-- Avoid layout shifts caused by client-side DOM changes.
-- Reduce client-side work on slower devices and networks.
-- Centralize HTML modifications at the edge.
+Use `teamtailorcdn.com` URLs anywhere an asset is embedded outside the CMS: MCAE (Account Engagement) forms, layouts and emails, email signatures and templates. If the CMS ever moves, change `ORIGIN_URL` in `wrangler.toml` and redeploy; every published link keeps working.
 
-Tradeoff: the HTML response is slightly delayed while it is parsed and rewritten.
+> This repo previously held the Webflow HTML-rewrite worker for teamtailorcdn.com. That site has been retired; the old code is in git history.
 
-## What this worker does
+## What it serves
 
-In `src/index.ts`, the worker:
+| Path | Origin | Cache (edge / browser) |
+| --- | --- | --- |
+| `/forms/*` | MCAE form styles and scripts built by marketingcms (`packages/ui-forms` → `public/forms`) | 5 min / 5 min |
+| `/api/<collection>/file/*` | Payload upload files (email images, media, logos, headshots…) | 1 day / 1 hour |
+| `/img/api/<collection>/file/*?width=…` | The same upload files, resized by Cloudflare Image Resizing | 1 year |
+| `/healthz` | Health check | none |
 
-- Proxies the upstream HTML.
-- Removes any existing `canonical` and `alternate` tags from `<head>`.
-- Injects a new canonical and hreflang set based on the request path.
-- Rewrites `<a href>` links from `teamtailorcdn.com` to `www.teamtailor.com` (Webflow internal links can stay on the CDN host in the CMS; `/img/*` URLs are not rewritten).
-- Adds a small demo block after `#header` to show the rewrite in action.
+Everything else returns **404**, including the Payload admin and API. Only `GET`, `HEAD` and `OPTIONS` are accepted.
 
-## Local development
+The upload collections allowed are listed in `src/paths.ts` (`UPLOAD_COLLECTIONS`). When a new upload collection is added in marketingcms, add its slug there and redeploy.
 
-Requirements:
+### Examples
 
-- Node.js
-- A Cloudflare account (free is fine) for `npm run dev:remote`
-
-Steps:
-
-1. Install dependencies: `npm i`
-2. Run `npm run dev:remote`
-3. Visit <http://localhost:8787/>
-4. Run `npm run test` to run canonical/hreflang path tests.
-
-The upstream origin is defined by `SHOP_URL` in `wrangler.toml`.
-
-Note: local development works best in Safari; Chrome DevTools may request a `.well-known/appspecific/...` URL that can interfere with rewrites.
-
-## Configuration
-
-`wrangler.toml` controls the worker environment:
-
-- `ENVIRONMENT`: `production` or `development`
-- `SHOP_URL`: upstream origin for local proxying
-- `DEBUG_LOGS`: set to `1` or `true` to enable verbose logs
-- `IMAGE_ORIGIN_URL`: optional base URL for image transformation (e.g. `https://storage.googleapis.com/your-bucket`). When set, requests to `/img/*` are served as resized images.
-- `IMAGE_REWRITE_BACKEND`: optional `"cloudflare"` or `"netlify"`. When set, HTML is rewritten so that all `cdn.prod.website-files.com` image URLs (in `src` and/or `srcset`) are replaced with transformation URLs (see below).
-- `NETLIFY_IMAGE_CDN_BASE`: for `IMAGE_REWRITE_BACKEND=netlify` only; base URL of the site (e.g. `https://www.teamtailor.com`). Transform URLs are `{base}/.netlify/images?url=...`.
-- `IMAGE_REWRITE_QUALITY`: optional quality for rewritten images, 1–100 (default 85). Applies to lossy formats where the backend supports it.
-- `IMAGE_REWRITE_FORMAT`: optional `"auto"` or `"preserve"`. `auto` (default): no format is set in the URL so the transformation service uses content negotiation (AVIF/WebP when the browser supports it). `preserve`: output format is derived from the source file extension (png, jpeg, webp, gif) so the original format is kept.
-- `IMAGE_REWRITE_IGNORE_SVG`: optional, default `"1"`/`"true"`. When on, SVG URLs are **not** rewritten in HTML (they stay pointing at the origin CDN). SVGs have no transform or quality settings; turning this off (`"0"`/`"false"`) rewrites SVG URLs to `/img/...` so the worker serves them as-is (no transformation).
-- `IMAGE_REWRITE_FULL_WIDTH_CLASSES`: optional, comma-separated list of CSS class names. If an `<img>` has any of these classes, its `sizes` attribute is **overridden** to a full-width value (`(max-width: 2400px) 100vw, 2400px`) so the browser selects a larger image from `srcset` (e.g. fixes Webflow hero images that ship with a small `sizes` like `240px`).
-- `IMAGE_REWRITE_PICTURE_FALLBACKS`: optional, default `"1"`/`"true"`. When on, rewritten images are wrapped in `<picture>` with `<source type="image/avif">` and `<source type="image/webp">` so browsers that don’t support AVIF get WebP instead of a broken image. AVIF is only used for widths ≤ 1200px (Cloudflare [format limits](https://developers.cloudflare.com/images/transform-images/#format-limitations)); the AVIF source has `media="(max-width: 1200px)"` so larger viewports use the WebP source and the browser can select higher-resolution WebP (e.g. 2400w). Set to `"0"`/`"false"` to keep a single `<img>` with content negotiation.
-
-## Responsive image rewrite
-
-When `IMAGE_REWRITE_BACKEND` is set, the worker rewrites every `<img>` that references `https://cdn.prod.website-files.com/` (in `src` or in `srcset`) so the browser never loads from that CDN — **except SVG URLs when `IMAGE_REWRITE_IGNORE_SVG` is on (default)**. SVGs are not transformed or quality-adjusted; with ignore on, they are left pointing at the origin CDN.
-
-For a worked example (input markup → how it’s processed → output with `<picture>` and WebP fallbacks), see [Responsive image rewrite example](docs/responsive-image-rewrite-example.md).
-
-- **Plain `<img src="...">`** (no srcset): the `src` is replaced and a `srcset` is added with widths 400, 800, 1200 and a default `sizes` attribute.
-- **Existing responsive `<img src="..." srcset="... 500w, ... 800w, ..." sizes="...">`**: each CDN URL in `src` and `srcset` is replaced with a transformation URL at the **same width** (or density). The existing `sizes` is kept unless the img has a class listed in `IMAGE_REWRITE_FULL_WIDTH_CLASSES`, in which case `sizes` is set to a full-width value so the browser picks a larger image (fixes e.g. Webflow full-width heroes that use a small `sizes`). Only entries whose URL encodes that width (e.g. `-p-2600` in the path for 2600w) get transform query params; entries like `...-min.avif` for 3840w get a passthrough URL (no query params) so the worker caches the origin file without transform, avoiding scale-up while still caching on Cloudflare.
-Quality and format are controlled by `IMAGE_REWRITE_QUALITY` and `IMAGE_REWRITE_FORMAT` (see Configuration above). When `IMAGE_REWRITE_PICTURE_FALLBACKS` is on (default), each rewritten image becomes a `<picture>` with explicit AVIF and WebP sources so older browsers get WebP instead of AVIF-only content.
-
-- **Cloudflare** (`IMAGE_REWRITE_BACKEND=cloudflare`): Transform URLs are `{request-origin}/img/{pathname-of-cdn-url}?width=...&quality=...&fit=contain` (and optional `format=` when using preserve). Requires `IMAGE_ORIGIN_URL` set to `https://cdn.prod.website-files.com` so `/img/*` can fetch from that origin.
-- **Netlify** (`IMAGE_REWRITE_BACKEND=netlify`): Transform URLs are `{NETLIFY_IMAGE_CDN_BASE}/.netlify/images?url={encoded-src}&w=...&q=...&fit=contain` (and optional `fm=` when using preserve). Use when the same site is proxied on Netlify and you want [Netlify Image CDN](https://docs.netlify.com/build/image-cdn/overview/).
-
-## Image transformations
-
-When `IMAGE_ORIGIN_URL` is set, the worker also handles **image resizing** at the path prefix `/img/`. It uses [Cloudflare Image Resizing](https://developers.cloudflare.com/images/transform-images/transform-via-workers/) and caches both the origin fetch and the transformed result (see [Hosting and transforming images at scale with Cloudflare](https://medium.com/@nfarina/hosting-and-transforming-images-at-scale-with-cloudflare-1aaeb97651bc)).
-
-- **URL format:** `/img/<path-to-image>?width=800&height=600&fit=cover&quality=85` (raster only; SVG has no query params).
-- **Query params (raster):** `width`, `height`, `fit` (scale-down, contain, cover, crop, pad, squeeze), `quality`, `format`, `dpr`, `blur`, `gravity`, `anim`.
-- **SVG:** Requests for `.svg` are served **as-is** from the origin (no transformation or quality). This fixes SVGs showing as empty when sent through the image pipeline.
-- **AVIF source:** Requests for `.avif` are served **as-is** from the origin (no transformation), so the worker is used only for caching and delivery.
-- **AVIF width limit:** Per [Cloudflare format limits](https://developers.cloudflare.com/images/transform-images/#format-limitations), AVIF has a 1200px hard limit on the longest side. When the requested width exceeds that, the worker forces WebP instead of AVIF.
-- **Content negotiation:** `Accept: image/avif` or `image/webp` is honored when `format` is not in the query.
-- **Origin:** The path after `/img/` is appended to `IMAGE_ORIGIN_URL` (e.g. `/img/uploads/photo.jpg` → `IMAGE_ORIGIN_URL/uploads/photo.jpg`). Only images from that origin host are allowed.
-
-To use a dedicated subdomain (e.g. `images.example.com`), add a Workers Route for that host to this same worker and either use a path like `images.example.com/uploads/photo.jpg` with a small code change to treat the full path as the image path, or keep using `example.com/img/uploads/photo.jpg`.
-
-## Production use
-
-Requirements:
-
-- A Shoptet project using Cloudflare as a proxy (see [Shoptet docs](https://podpora.shoptet.cz/hc/cs/articles/7128655751826-Cloudflare))
-- Cloudflare access with `Cloudflare Workers Admin` rights
-
-Steps:
-
-1. Run `npm run deploy:production` (uploads the worker; use `--env=""` to target the top-level production config).
-2. Configure Workers Routes in Cloudflare (if not already set). Production routes are **not** defined in `wrangler.toml`; they live in the dashboard under **Workers & Pages → your worker → Settings → Domains & Routes**.
-
-If deploy prints **“No deploy targets”**, the worker still uploaded (check for `Current Version ID`). That message only means wrangler did not attach routes from the config file. Traffic on routes you configured in the dashboard will use the new version automatically.
-
-When setting routes, exclude common system and asset paths. Recommended disabled routes are listed in `src/config/recommended-disabled-routes.json`, and should be adjusted per project.
-
-Example of typical Workers Routes settings (see [docs](https://developers.cloudflare.com/workers/configuration/routing/routes/) for matching rules):
-
-<img src="docs/img/cloudflare-navigation.png" alt="Cloudflare navigation" style="margin: 20px; padding: 10px; border: 1px solid gray" />
-
-<img src="docs/img/routes-setting.png" alt="Worker Routes settings" style="margin: 20px; padding: 10px; border: 1px solid gray" />
-
-## HTML parsing strategy
-
-This example uses [node-html-parser](https://www.npmjs.com/package/node-html-parser), which parses the whole document into memory. It is flexible and comparable to browser DOM manipulation (`querySelector`, etc.), and is suitable for more complex HTML changes. Average TTFB increase is around 50-70ms.
-
-If you only need simple streaming rewrites, switch to the `with-html-rewriter` branch to use Cloudflare's [HTMLRewriter](https://developers.cloudflare.com/workers/runtime-apis/html-rewriter/). It streams HTML while rewriting, but has more limited capabilities.
-
-## Staging deployments
-
-To deploy a staging worker, use environment variables. In this repo, `npm run deploy:staging` publishes a `workers.dev` URL that runs in dev mode. See Cloudflare docs for environment variables and staging workflows.
-
-## Future enhancements
-
-- Live reload for `dev:remote`
-- Unified workflow for HTML, JS, and CSS customization
-- GitHub Actions deployment
-
-## Injected content
-
-The worker removes any existing canonical and hreflang tags and injects the following set based on the requested path. Example for `/en/`:
-
-```html
-<link rel="canonical" href="https://www.teamtailor.com/en/">
-<link rel="alternate" hreflang="en" href="https://www.teamtailor.com/en/">
-<link rel="alternate" hreflang="en-us" href="https://www.teamtailor.com/en-us/">
-<link rel="alternate" hreflang="da" href="https://www.teamtailor.com/da/">
-<link rel="alternate" hreflang="de" href="https://www.teamtailor.com/de/">
-<link rel="alternate" hreflang="es" href="https://www.teamtailor.com/es/">
-<link rel="alternate" hreflang="fi" href="https://www.teamtailor.com/fi/">
-<link rel="alternate" hreflang="fr" href="https://www.teamtailor.com/fr/">
-<link rel="alternate" hreflang="it" href="https://www.teamtailor.com/it/">
-<link rel="alternate" hreflang="nl" href="https://www.teamtailor.com/nl/">
-<link rel="alternate" hreflang="no" href="https://www.teamtailor.com/no/">
-<link rel="alternate" hreflang="sv" href="https://www.teamtailor.com/sv/">
-<link rel="alternate" hreflang="x-default" href="https://www.teamtailor.com/en/">
+```
+https://teamtailorcdn.com/forms/tt-form.95a2a26e.min.js
+https://teamtailorcdn.com/api/email/file/header.png
+https://teamtailorcdn.com/img/api/media/file/photo.jpg?width=800&quality=80
 ```
 
-For subpages, Webflow locale path segments (`en`, `en-us`, `de`, `fr`, `es`) are stripped so that the same page in every locale points to the locale-agnostic path. For example, a request to `/de/demo` produces canonical and hreflang URLs like `/en/demo/`, `/de/demo/`, `/es/demo/`. Run `npm run test` to assert homepage and subpage behaviour.
+Image options for `/img/*`: `width`, `height`, `fit` (scale-down, contain, cover, crop, pad, squeeze), `quality`, `format`, `dpr`, `blur`, `gravity`, `anim`. Without `format`, AVIF or WebP is chosen from the browser's `Accept` header.
+
+## Security
+
+- Request cookies and `Authorization` headers are never forwarded to the origin, and `Set-Cookie` from the origin is never returned. CMS sessions cannot leak through this domain.
+- Uploaded files get a sandboxing `Content-Security-Policy`, so an uploaded HTML or SVG file cannot run script on this domain.
+- All responses carry `X-Robots-Tag: noindex` and `X-Content-Type-Options: nosniff`.
+- CORS is open (`Access-Control-Allow-Origin: *`) because these are public assets loaded from MCAE and email clients.
+
+## Caching notes
+
+Form assets are built without content hashes, so a marketingcms deploy keeps the same file names. Their 5-minute TTL means a deploy is live within about 5 minutes. Upload files are cached for a day at the edge; if a file is replaced under the same name, purge it in Cloudflare (Caching → Configuration → Custom purge) or wait a day.
+
+## Develop and deploy
+
+Requirements: Node.js and access to the Teamtailor Cloudflare account (the one with the teamtailorcdn.com zone).
+
+```sh
+npm install
+npm test                 # unit tests (paths, headers, caching)
+npm run typecheck
+npm run dev              # local dev against tt.payloadcms.app
+npm run deploy:dev       # deploys teamtailor-assets-dev on *.workers.dev
+npm run deploy:production
+```
+
+## Checking it works
+
+```sh
+curl -sI https://teamtailorcdn.com/healthz
+curl -sI https://teamtailorcdn.com/forms/tt-form.95a2a26e.min.js
+curl -sI https://teamtailorcdn.com/admin            # expect 404
+```
+
+Logs: Cloudflare dashboard → Workers & Pages → teamtailor-assets → Logs.
