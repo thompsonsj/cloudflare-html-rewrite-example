@@ -4,7 +4,7 @@ import { classifyPath } from './paths';
 import type { Env } from './types/env';
 
 const env: Env = { ENVIRONMENT: 'production', ORIGIN_URL: 'https://tt.payloadcms.app' };
-const BASE = 'https://assets.teamtailorcdn.com';
+const BASE = 'https://teamtailorcdn.com';
 
 afterEach(() => {
 	vi.unstubAllGlobals();
@@ -131,6 +131,7 @@ describe('worker', () => {
 			env
 		);
 		expect(res.status).toBe(200);
+		expect(res.headers.get('Content-Security-Policy')).toContain('sandbox');
 		const [originRequest, init] = fetchMock.mock.calls[0] as [Request, RequestInit & { cf: { image: Record<string, unknown> } }];
 		expect(originRequest.url).toBe('https://tt.payloadcms.app/api/media/file/photo.jpg');
 		expect(originRequest.headers.get('Cookie')).toBeNull();

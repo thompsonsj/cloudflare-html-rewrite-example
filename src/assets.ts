@@ -1,7 +1,7 @@
 /**
  * teamtailor-assets: a CDN in front of the Payload CMS for public assets.
  *
- * Serves https://assets.teamtailorcdn.com/<path> from ORIGIN_URL/<path> for:
+ * Serves https://teamtailorcdn.com/<path> from ORIGIN_URL/<path> for:
  *   - /forms/*                     MCAE form styles and scripts (ui-forms)
  *   - /api/<collection>/file/*     Payload upload files (email images, media, logos...)
  *   - /img/<one of the above>      the same files, resized by Cloudflare Image Resizing
@@ -44,6 +44,9 @@ const CORS_HEADERS = {
 	'Timing-Allow-Origin': '*',
 };
 
+/** Uploaded files are user-supplied: never let an uploaded HTML/SVG file run script on this domain. */
+const UPLOAD_CSP = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox";
+
 function plain(status: number, body: string, extra: Record<string, string> = {}): Response {
 	return new Response(body, {
 		status,
@@ -85,11 +88,21 @@ export function finaliseResponse(origin: Response, kind: AssetKind): Response {
 		response.headers.set('Cache-Control', 'no-store');
 	}
 
-	// Uploaded files are user-supplied: never let an uploaded HTML/SVG file run script on this domain.
 	if (kind === 'upload') {
-		response.headers.set('Content-Security-Policy', "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox");
+		response.headers.set('Content-Security-Policy', UPLOAD_CSP);
 	}
 	return response;
+}
+
+/** Strips unsafe headers and applies security headers to an image response. Cache-Control is set by the image handler. */
+function finaliseImage(response: Response): Response {
+	const out = new Response(response.body, response);
+	for (const name of STRIPPED_RESPONSE_HEADERS) out.headers.delete(name);
+	for (const [name, value] of Object.entries(CORS_HEADERS)) out.headers.set(name, value);
+	out.headers.set('X-Robots-Tag', 'noindex');
+	out.headers.set('X-Content-Type-Options', 'nosniff');
+	out.headers.set('Content-Security-Policy', UPLOAD_CSP);
+	return out;
 }
 
 export default {
@@ -120,8 +133,8 @@ export default {
 				if (debug) console.log('[assets] 404 img', url.pathname);
 				return plain(404, 'Not found');
 			}
-			// Same header hygiene as the plain proxy: never forward cookies or auth.
-			const safeRequest = new Request(request.url, { method: 'GET', headers: buildOriginRequest(request, originBase, originPath).headers });
+			const { headers } = buildOriginRequest(request, originBase, originPath);
+			const safeRequest = new Request(request.url, { method: 'GET', headers });
 			const imageResponse = await handleImageRequest(safeRequest, { ...env, IMAGE_ORIGIN_URL: originBase }, originPath);
 			return finaliseImage(imageResponse);
 		}
@@ -150,12 +163,3 @@ export default {
 		return finaliseResponse(origin, kind);
 	},
 };
-
-function finaliseImage(response: Response): Response {
-	const out = new Response(response.body, response);
-	for (const name of STRIPPED_RESPONSE_HEADERS) out.headers.delete(name);
-	for (const [name, value] of Object.entries(CORS_HEADERS)) out.headers.set(name, value);
-	out.headers.set('X-Robots-Tag', 'noindex');
-	out.headers.set('X-Content-Type-Options', 'nosniff');
-	return out;
-}

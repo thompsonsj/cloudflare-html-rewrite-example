@@ -34,6 +34,7 @@ export const FORMS_PREFIX = '/forms/';
 
 export type AssetKind = 'forms' | 'upload';
 
+const UPLOAD_COLLECTION_SET = new Set<string>(UPLOAD_COLLECTIONS);
 const UPLOAD_PATH_RE = /^\/api\/([a-z0-9-]+)\/file\/[^/]/;
 
 /**
@@ -57,7 +58,7 @@ export function classifyPath(pathname: string): AssetKind | null {
 	}
 
 	const match = pathname.match(UPLOAD_PATH_RE);
-	if (match && (UPLOAD_COLLECTIONS as readonly string[]).includes(match[1])) {
+	if (match && UPLOAD_COLLECTION_SET.has(match[1])) {
 		return 'upload';
 	}
 
