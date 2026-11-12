@@ -107,7 +107,7 @@ function finaliseImage(response: Response): Response {
 }
 
 export default {
-	async fetch(request: Request, env: Env): Promise<Response> {
+	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
 		const url = new URL(request.url);
 		const debug = env.DEBUG_LOGS === '1' || env.DEBUG_LOGS === 'true';
 		const originBase = (env.ORIGIN_URL || '').replace(/\/$/, '');
@@ -146,7 +146,7 @@ export default {
 			const response = finaliseImage(imageResponse);
 
 			if (request.method === 'GET' && response.ok) {
-				await cache.put(request.url, response.clone());
+				ctx.waitUntil(cache.put(request.url, response.clone()));
 			}
 			return response;
 		}
@@ -181,11 +181,9 @@ export default {
 		const response = finaliseResponse(origin, kind);
 
 		if (request.method === 'GET' && response.ok) {
-			try {
-				await cache.put(request.url, response.clone());
-			} catch (err) {
+			ctx.waitUntil(cache.put(request.url, response.clone()).catch(err => {
 				console.error('[assets] cache.put failed', url.pathname, err);
-			}
+			}));
 		}
 		return response;
 	},

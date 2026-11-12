@@ -4,6 +4,7 @@ import { classifyPath } from './paths';
 import type { Env } from './types/env';
 
 const env: Env = { ENVIRONMENT: 'production', ORIGIN_URL: 'https://tt.payloadcms.app' };
+const ctx = { waitUntil: (p: Promise<unknown>) => void p, passThroughOnException: () => {} } as ExecutionContext;
 const BASE = 'https://teamtailorcdn.com';
 
 afterEach(() => {
@@ -62,20 +63,20 @@ describe('worker', () => {
 
 	it('returns 404 without calling the origin for disallowed paths', async () => {
 		const fetchMock = mockOrigin(new Response('should not be called'));
-		const res = await worker.fetch(new Request(`${BASE}/admin`), env);
+		const res = await worker.fetch(new Request(`${BASE}/admin`), env, ctx);
 		expect(res.status).toBe(404);
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
 	it('returns 405 for writes', async () => {
 		const fetchMock = mockOrigin(new Response('x'));
-		const res = await worker.fetch(new Request(`${BASE}/forms/a.js`, { method: 'POST', body: 'x' }), env);
+		const res = await worker.fetch(new Request(`${BASE}/forms/a.js`, { method: 'POST', body: 'x' }), env, ctx);
 		expect(res.status).toBe(405);
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
 	it('answers CORS preflight', async () => {
-		const res = await worker.fetch(new Request(`${BASE}/forms/a.js`, { method: 'OPTIONS' }), env);
+		const res = await worker.fetch(new Request(`${BASE}/forms/a.js`, { method: 'OPTIONS' }), env, ctx);
 		expect(res.status).toBe(204);
 		expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*');
 	});
@@ -89,7 +90,8 @@ describe('worker', () => {
 		);
 		const res = await worker.fetch(
 			new Request(`${BASE}/forms/tt-form.js?v=2`, { headers: { Cookie: 'payload-token=abc', Authorization: 'Bearer x', Accept: '*/*' } }),
-			env
+			env,
+			ctx
 		);
 
 		expect(res.status).toBe(200);
@@ -109,7 +111,7 @@ describe('worker', () => {
 
 	it('proxies upload files with a longer cache and a sandboxing CSP', async () => {
 		const fetchMock = mockOrigin(new Response('png', { status: 200, headers: { 'Content-Type': 'image/png' } }));
-		const res = await worker.fetch(new Request(`${BASE}/api/email/file/header.png`), env);
+		const res = await worker.fetch(new Request(`${BASE}/api/email/file/header.png`), env, ctx);
 
 		expect(res.status).toBe(200);
 		expect(res.headers.get('Cache-Control')).toBe('public, max-age=3600');
@@ -121,16 +123,16 @@ describe('worker', () => {
 
 	it('does not let browsers cache origin errors', async () => {
 		mockOrigin(new Response('missing', { status: 404 }));
-		const res = await worker.fetch(new Request(`${BASE}/api/media/file/missing.png`), env);
+		const res = await worker.fetch(new Request(`${BASE}/api/media/file/missing.png`), env, ctx);
 		expect(res.status).toBe(404);
 		expect(res.headers.get('Cache-Control')).toBe('no-store');
 	});
 
 	it('only resizes images from allowed upload paths', async () => {
 		const fetchMock = mockOrigin(new Response('x'));
-		const denied = await worker.fetch(new Request(`${BASE}/img/admin/logo.png`), env);
+		const denied = await worker.fetch(new Request(`${BASE}/img/admin/logo.png`), env, ctx);
 		expect(denied.status).toBe(404);
-		const deniedForms = await worker.fetch(new Request(`${BASE}/img/forms/logo.png`), env);
+		const deniedForms = await worker.fetch(new Request(`${BASE}/img/forms/logo.png`), env, ctx);
 		expect(deniedForms.status).toBe(404);
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
@@ -139,7 +141,8 @@ describe('worker', () => {
 		const fetchMock = mockOrigin(new Response('img', { status: 200, headers: { 'Content-Type': 'image/webp' } }));
 		const res = await worker.fetch(
 			new Request(`${BASE}/img/api/media/file/photo.jpg?width=400`, { headers: { Cookie: 'payload-token=abc', Accept: 'image/webp' } }),
-			env
+			env,
+			ctx
 		);
 		expect(res.status).toBe(200);
 		expect(res.headers.get('Content-Security-Policy')).toContain('sandbox');
@@ -150,19 +153,19 @@ describe('worker', () => {
 	});
 
 	it('serves a health check', async () => {
-		const res = await worker.fetch(new Request(`${BASE}/healthz`), env);
+		const res = await worker.fetch(new Request(`${BASE}/healthz`), env, ctx);
 		expect(res.status).toBe(200);
 	});
 
 	it('returns a cached response without calling the origin', async () => {
 		const cachedResponse = new Response('cached', {
 			status: 200,
-			headers: { 'Content-Type': 'application/javascript', 'Cache-Control': 'public, max-age=300' },
+			headers: { 'Content-Type': 'application/javascript', 'Cache-Control': 'public, max-age=86400' },
 		});
 		const { match } = mockCache(cachedResponse);
 		const fetchMock = mockOrigin(new Response('should not be called'));
 
-		const res = await worker.fetch(new Request(`${BASE}/forms/tt-form.js`), env);
+		const res = await worker.fetch(new Request(`${BASE}/forms/tt-form.js`), env, ctx);
 
 		expect(res.status).toBe(200);
 		expect(await res.text()).toBe('cached');
@@ -174,13 +177,13 @@ describe('worker', () => {
 		const { put } = mockCache();
 
 		mockOrigin(new Response('ok', { status: 200, headers: { 'Content-Type': 'application/javascript' } }));
-		await worker.fetch(new Request(`${BASE}/forms/tt-form.js`), env);
+		await worker.fetch(new Request(`${BASE}/forms/tt-form.js`), env, ctx);
 		expect(put).toHaveBeenCalledOnce();
 
 		put.mockClear();
 
 		mockOrigin(new Response('missing', { status: 404 }));
-		await worker.fetch(new Request(`${BASE}/api/media/file/missing.png`), env);
+		await worker.fetch(new Request(`${BASE}/api/media/file/missing.png`), env, ctx);
 		expect(put).not.toHaveBeenCalled();
 	});
 });
