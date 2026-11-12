@@ -82,6 +82,7 @@ export function finaliseResponse(origin: Response, kind: AssetKind): Response {
 	response.headers.set('X-Robots-Tag', 'noindex');
 	response.headers.set('X-Content-Type-Options', 'nosniff');
 
+	response.headers.delete('Cache-Control');
 	if (origin.ok) {
 		response.headers.set('Cache-Control', `public, max-age=${CACHE[kind].browser}`);
 	} else {
