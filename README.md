@@ -12,7 +12,7 @@ Use `teamtailorcdn.com` URLs anywhere an asset is embedded outside the CMS: MCAE
 
 | Path | Origin | Cache (edge / browser) |
 | --- | --- | --- |
-| `/forms/*` | MCAE form styles and scripts built by marketingcms (`packages/ui-forms` → `public/forms`) | 5 min / 5 min |
+| `/forms/*` | MCAE form styles and scripts built by marketingcms (`packages/ui-forms` → `public/forms`) | 1 day / 1 day |
 | `/api/<collection>/file/*` | Payload upload files (email images, media, logos, headshots…) | 1 day / 1 hour |
 | `/img/api/<collection>/file/*?width=…` | The same upload files, resized by Cloudflare Image Resizing | 1 year |
 | `/healthz` | Health check | none |
@@ -40,7 +40,22 @@ Image options for `/img/*`: `width`, `height`, `fit` (scale-down, contain, cover
 
 ## Caching notes
 
-Form assets are built without content hashes, so a marketingcms deploy keeps the same file names. Their 5-minute TTL means a deploy is live within about 5 minutes. Upload files are cached for a day at the edge; if a file is replaced under the same name, purge it in Cloudflare (Caching → Configuration → Custom purge) or wait a day.
+Form assets are built without content hashes, so a marketingcms deploy keeps the same file names. The 1-day edge TTL means updated files are not served until the cache is purged (see below) or the entry expires. Upload files are also cached for a day at the edge; if a file is replaced under the same name, purge it via the Payload CMS admin (see below).
+
+## Purging the cache
+
+After a marketingcms deploy that changes form scripts, purge the edge cache so updated files are served immediately rather than waiting up to 24 hours.
+
+**How to purge:**
+
+1. Log into the Payload CMS admin at https://tt.payloadcms.app/admin
+2. Go to **Admin → Cloudflare Cache Purges → Create New**
+3. The form pre-fills with all production-critical form asset URLs
+4. Click **Save** — the Cloudflare API is called immediately and the response is stored on the document
+
+To purge a specific upload file (image, logo, headshot, etc.) that has been replaced under the same filename, create a new document and replace the default form URLs with the upload file URL, e.g. `https://teamtailorcdn.com/api/headshots/file/photo.jpg`.
+
+Do not purge via the Cloudflare dashboard directly — the Payload collection keeps an audit trail of purge operations and their API responses.
 
 ## Develop and deploy
 
